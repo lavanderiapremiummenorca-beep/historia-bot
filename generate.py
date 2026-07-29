@@ -106,9 +106,10 @@ def esc(t):
 HL = "&H0037B6FF&"   # amarillo/ámbar para la palabra activa (BBGGRR)
 WHITE = "&H00FFFFFF&"
 
-def cap_word_events(cap, st, en, chunk=3):
-    """Subtítulos que aparecen POCO A POCO: en grupos de pocas palabras
-    (máx. 'chunk'), revelando una a una, no toda la frase de golpe."""
+def cap_word_events(cap, st, en, chunk=1):
+    """Una palabra a la vez, centrada y quieta, sincronizada con la voz.
+    Limpio y sin parpadeos: cada palabra aparece cuando se dice y la
+    sustituye la siguiente (nada de recolocar ni animaciones que saltan)."""
     words = cap.split()
     if not words:
         return []
@@ -121,28 +122,11 @@ def cap_word_events(cap, st, en, chunk=3):
         wd = dur * wt / tot
         tspan.append((cur, cur + wd))
         cur += wd
-    n = len(words)
     evts = []
-    for wi in range(n):
+    for wi, w in enumerate(words):
         ws = tspan[wi][0]
-        we = tspan[wi + 1][0] if wi + 1 < n else en
-        c0 = (wi // chunk) * chunk          # inicio del grupo actual
-        grp_end = min(c0 + chunk, n)
-        toks = []
-        for gi in range(c0, grp_end):
-            if gi > wi:
-                break                        # aún no reveladas -> no se muestran
-            w = esc(words[gi].upper())
-            if gi == wi:
-                # palabra recién revelada: pop + color ámbar
-                toks.append("{\\c" + HL + "\\fscx86\\fscy86\\t(0,120,\\fscx108\\fscy108)"
-                            "\\t(120,240,\\fscx100\\fscy100)}" + w
-                            + "{\\c" + WHITE + "\\fscx100\\fscy100}")
-            else:
-                # ya reveladas dentro del grupo: blancas
-                toks.append(w)
-        fad = "{\\fad(80,0)}" if wi == c0 else ""
-        evts.append((ws, we, fad + " ".join(toks)))
+        we = tspan[wi + 1][0] if wi + 1 < len(words) else en
+        evts.append((ws, we, esc(w.upper())))
     return evts
 
 def build_ass(events, path, handle=None, total=0.0):
