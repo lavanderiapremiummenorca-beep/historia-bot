@@ -126,7 +126,7 @@ def cap_word_events(cap, st, en, chunk=1):
     for wi, w in enumerate(words):
         ws = tspan[wi][0]
         we = tspan[wi + 1][0] if wi + 1 < len(words) else en
-        evts.append((ws, we, esc(w.upper())))
+        evts.append((ws, we, "{\\fad(70,0)}" + esc(w.upper())))
     return evts
 
 def build_ass(events, path, handle=None, total=0.0):
@@ -140,7 +140,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Main,{FONT},72,&H00FFFFFF,&H00FFFFFF,&H00000000,&H90000000,-1,0,0,0,100,100,1,0,1,5,3,2,140,140,700,1
+Style: Main,{FONT},82,&H00FFFFFF,&H00FFFFFF,&H00000000,&H90000000,-1,0,0,0,100,100,1,0,1,6,4,2,120,120,720,1
 Style: Brand,{FONT},42,&H50FFFFFF,&H50FFFFFF,&H90000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,0,8,40,40,80,1
 
 [Events]
@@ -168,7 +168,7 @@ def _pexels_clips(query, n, workdir):
                + urllib.parse.urlencode({"query": query, "orientation": "portrait",
                                          "per_page": 20, "size": "medium"}))
         req = urllib.request.Request(url, headers={"Authorization": key})
-        with urllib.request.urlopen(req, timeout=25) as r:
+        with urllib.request.urlopen(req, timeout=15) as r:
             data = json.loads(r.read().decode())
         vids = data.get("videos", [])
         out = []
@@ -177,10 +177,10 @@ def _pexels_clips(query, n, workdir):
                      if (f.get("height") or 0) >= (f.get("width") or 0)] or vid.get("video_files", [])
             if not files:
                 continue
-            files.sort(key=lambda f: abs((f.get("width") or 1080) - 1080))
+            files.sort(key=lambda f: (0 if (f.get("width") or 0) >= 1080 else 1, -(f.get("width") or 0)))
             dst = os.path.join(workdir, f"src_{j}.mp4")
             try:
-                with urllib.request.urlopen(files[0]["link"], timeout=60) as r, open(dst, "wb") as f:
+                with urllib.request.urlopen(files[0]["link"], timeout=20) as r, open(dst, "wb") as f:
                     f.write(r.read())
                 if os.path.getsize(dst) > 10000:
                     out.append(dst)
@@ -202,19 +202,21 @@ def _pixabay_clips(query, n, workdir):
         url = "https://pixabay.com/api/videos/?" + urllib.parse.urlencode(
             {"key": key, "q": query, "per_page": max(3, min(n * 2, 20)), "safesearch": "true"})
         req = urllib.request.Request(url, headers={"User-Agent": "canal-bot/1.0"})
-        with urllib.request.urlopen(req, timeout=25) as r:
+        with urllib.request.urlopen(req, timeout=15) as r:
             data = json.loads(r.read().decode())
         hits = data.get("hits", [])
+        # prioriza clips verticales (menos recorte/estirado) para más nitidez
+        hits = sorted(hits, key=lambda h: (h.get("width", 1) / max(1, h.get("height", 1))))
         out = []
         for j, h in enumerate(hits[:n]):
             v = h.get("videos", {})
-            f = v.get("medium") or v.get("large") or v.get("small") or v.get("tiny")
+            f = v.get("large") or v.get("medium") or v.get("small") or v.get("tiny")
             if not f or not f.get("url"):
                 continue
             dst = os.path.join(workdir, f"src_{j}.mp4")
             try:
                 rq = urllib.request.Request(f["url"], headers={"User-Agent": "canal-bot/1.0"})
-                with urllib.request.urlopen(rq, timeout=60) as r, open(dst, "wb") as fo:
+                with urllib.request.urlopen(rq, timeout=20) as r, open(dst, "wb") as fo:
                     fo.write(r.read())
                 if os.path.getsize(dst) > 10000:
                     out.append(dst)
@@ -240,15 +242,17 @@ def _gather_clips(script, workdir):
     if ldir and os.path.isdir(ldir):
         return [os.path.join(ldir, f) for f in sorted(os.listdir(ldir))
                 if f.lower().endswith((".mp4", ".mov", ".webm", ".mkv", ".m4v"))]
-    return _clips_for_query(script.get("broll"), 8, workdir)
+    return _clips_for_query(script.get("broll"), 4, workdir)
 
 def _norm_clip(src, dur, out):
     # recorte a vertical + push-in suave (zoom que da movimiento y "punch" en cada corte)
-    vf = ("scale=1188:2112:force_original_aspect_ratio=increase,crop=1188:2112,"
-          "zoompan=z='min(1.02+0.0011*in,1.16)':d=1:"
-          "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30,setsar=1")
+    # supersampling (1440 -> 1080) + zoom más suave + enfoque = fondo más nítido
+    vf = ("scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,"
+          "zoompan=z='min(1.02+0.0009*in,1.10)':d=1:"
+          "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30,"
+          "unsharp=5:5:0.7:5:5:0.0,setsar=1")
     run(["ffmpeg","-y","-loglevel","error","-stream_loop","-1","-t",f"{dur:.2f}","-i",src,
-         "-vf",vf,"-an","-c:v","libx264","-preset","veryfast","-crf","23","-pix_fmt","yuv420p", out])
+         "-vf",vf,"-an","-c:v","libx264","-preset","fast","-crf","20","-pix_fmt","yuv420p", out])
 
 def _groups(nlines, n):
     """Reparte n líneas en n grupos contiguos lo más iguales posible."""
@@ -408,8 +412,8 @@ def build_video(script, out_path, workdir):
     ass_esc = ass.replace("\\","/").replace(":","\\:")
     if bgv:
         inputs = ["-i", bgv]
-        base_vf = ("eq=brightness=-0.05:saturation=1.12,"
-                   "drawbox=0:0:1080:1920:color=black@0.40:t=fill,"
+        base_vf = ("eq=brightness=-0.03:saturation=1.18:contrast=1.05,"
+                   "drawbox=0:0:1080:1920:color=black@0.28:t=fill,"
                    f"subtitles='{ass_esc}',setsar=1")
     else:
         inputs = ["-loop","1","-i", grad]
@@ -441,16 +445,19 @@ def build_video(script, out_path, workdir):
     ai_voice = 2 if has_chart else 1
     if music_file:
         ai_mus = ai_voice + 1
-        fc += (f";[{ai_voice}:a]volume=1.0[vo];[{ai_mus}:a]volume=0.10[mu];"
-               f"[vo][mu]amix=inputs=2:duration=first:dropout_transition=0[a]")
+        # voz normalizada a nivel pro (-16 LUFS) y música de fondo suave
+        fc += (f";[{ai_voice}:a]loudnorm=I=-16:TP=-1.5:LRA=11[vo];"
+               f"[{ai_mus}:a]volume=0.09[mu];"
+               f"[vo][mu]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[a]")
         amap = "[a]"
     else:
-        amap = f"{ai_voice}:a"
+        fc += f";[{ai_voice}:a]loudnorm=I=-16:TP=-1.5:LRA=11[a]"
+        amap = "[a]"
 
     cmd = ["ffmpeg","-y","-loglevel","error"] + inputs + [
         "-filter_complex",fc,"-map","[v]","-map",amap,
         "-t",f"{total:.2f}","-r","30",
-        "-c:v","libx264","-preset","medium","-crf","20","-pix_fmt","yuv420p",
+        "-c:v","libx264","-preset","medium","-crf","18","-pix_fmt","yuv420p",
         "-c:a","aac","-b:a","192k","-movflags","+faststart", out_path]
     run(cmd)
     return total
