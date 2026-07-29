@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Generador de Shorts de economía (100% gratis, sin servicios de pago).
+Generador de Shorts (100% gratis, sin servicios de pago).
 Flujo: guion -> voz (edge-tts o espeak) -> subtítulos sincronizados ->
-fondo con movimiento + gráfica -> vídeo vertical 1080x1920.
+fondo con movimiento -> vídeo vertical 1080x1920.
 
 TTS_ENGINE=edge  -> voz neuronal (para GitHub Actions, buena calidad)
 TTS_ENGINE=espeak-> voz offline (prueba de formato en local)
@@ -13,7 +13,10 @@ import urllib.request, urllib.parse, datetime
 BASE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(BASE, "assets")
 OUTPUT = os.path.join(BASE, "output")
-MUSIC = os.path.join(BASE, "musica")
+# Carpeta de música: acepta "music" o "musica" (por si se nombró en español)
+MUSIC = os.path.join(BASE, "music")
+if not os.path.isdir(MUSIC) and os.path.isdir(os.path.join(BASE, "musica")):
+    MUSIC = os.path.join(BASE, "musica")
 os.makedirs(OUTPUT, exist_ok=True)
 
 TTS_ENGINE = os.environ.get("TTS_ENGINE", "espeak")
@@ -75,6 +78,19 @@ def synth(text, out_wav):
         synth_edge(text, out_wav)
     else:
         synth_espeak(text, out_wav)
+
+# Texto para la locución: une las frases con una pausa MÁS CORTA (coma en vez
+# de punto y seguido) para que el narrador vaya más fluido entre frases.
+def _tts_join(lines):
+    parts = []
+    for l in lines:
+        v = (l.get("voice", "") or "").strip()
+        if not v:
+            continue
+        if v.endswith("."):
+            v = v[:-1]          # quita solo el punto final -> pausa más corta
+        parts.append(v)
+    return ", ".join(parts)
 
 # ---------- Subtítulos ASS ----------
 def ass_time(t):
@@ -205,7 +221,7 @@ def _pixabay_clips(query, n, workdir):
     try:
         url = "https://pixabay.com/api/videos/?" + urllib.parse.urlencode(
             {"key": key, "q": query, "per_page": max(3, min(n * 2, 20)), "safesearch": "true"})
-        req = urllib.request.Request(url, headers={"User-Agent": "economia-bot/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "canal-bot/1.0"})
         with urllib.request.urlopen(req, timeout=25) as r:
             data = json.loads(r.read().decode())
         hits = data.get("hits", [])
@@ -217,7 +233,7 @@ def _pixabay_clips(query, n, workdir):
                 continue
             dst = os.path.join(workdir, f"src_{j}.mp4")
             try:
-                rq = urllib.request.Request(f["url"], headers={"User-Agent": "economia-bot/1.0"})
+                rq = urllib.request.Request(f["url"], headers={"User-Agent": "canal-bot/1.0"})
                 with urllib.request.urlopen(rq, timeout=60) as r, open(dst, "wb") as fo:
                     fo.write(r.read())
                 if os.path.getsize(dst) > 10000:
@@ -266,7 +282,6 @@ def _groups(nlines, n):
 
 def build_background(script, total, workdir, spans):
     """Fondo dinámico: un clip real por IDEA, con push-in. None si no hay clips."""
-    # fuentes: si el guion trae broll_list (una consulta por idea), un clip por consulta
     srcs = []
     blist = script.get("broll_list")
     if blist and not os.environ.get("LOCAL_BROLL_DIR") and (
@@ -327,7 +342,7 @@ def build_audio(lines, workdir):
 
 def _audio_oneshot(lines, workdir):
     full = os.path.join(workdir, "full.wav")
-    text = "  ".join(l.get("voice", "").strip() for l in lines if l.get("voice"))
+    text = _tts_join(lines)
     words = synth_edge_full(text, full)
     total = dur_of(full)
     if total <= 0:
@@ -346,10 +361,7 @@ def _audio_oneshot(lines, workdir):
         spans[-1] = (spans[-1][0], total)
         return full, spans, total
 
-    # Camino B: faltan tiempos de palabra -> NO caemos a frase-a-frase (menos
-    # fluido). Mantenemos la locución continua y repartimos la duración total
-    # de forma proporcional al tamaño de cada frase. La voz sigue siendo fluida
-    # y los subtítulos quedan bien sincronizados.
+    # Camino B: faltan tiempos de palabra -> reparto proporcional (voz continua).
     sys.stderr.write("[tts] one-shot sin tiempos de palabra; reparto proporcional (voz continua igualmente).\n")
     weights = [max(1, len(l.get("voice", "").strip())) for l in lines]
     wsum = sum(weights)
@@ -382,13 +394,14 @@ def build_video(script, out_path, workdir):
     lines = script["lines"]
     full_wav, spans, total = build_audio(lines, workdir)
 
-    # Subtítulos CONTINUOS: cada uno se muestra hasta que empieza el siguiente
-    # (sin huecos en negro entre frases -> transición fluida).
+    # Subtítulos VERBATIM: se muestra EXACTAMENTE lo que se narra (campo 'voice'),
+    # palabra por palabra, cada frase hasta que empieza la siguiente (sin huecos).
     events = []
     for i, ln in enumerate(lines):
         start = spans[i][0]
         end = spans[i + 1][0] if i + 1 < len(lines) else total
-        events.append((start, end, ln.get("cap", ""), bool(ln.get("hide_caption"))))
+        txt = (ln.get("voice", "") or ln.get("cap", "")).strip()
+        events.append((start, end, txt, False))
     ass = os.path.join(workdir, "caps.ass")
     build_ass(events, ass, HANDLE, total)
 
@@ -467,7 +480,6 @@ def pick_script(scripts, arg=None):
         for s in scripts:
             if s["id"] == arg:
                 return s
-    # un guion distinto cada día Y en cada ejecución (usa el nº de ejecución de GitHub)
     import datetime
     yday = datetime.date.today().timetuple().tm_yday
     run = int(os.environ.get("GITHUB_RUN_NUMBER", "0") or "0")
