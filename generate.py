@@ -13,7 +13,7 @@ import urllib.request, urllib.parse, datetime
 BASE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(BASE, "assets")
 OUTPUT = os.path.join(BASE, "output")
-MUSIC = os.path.join(BASE, "music")
+MUSIC = os.path.join(BASE, "musica")
 os.makedirs(OUTPUT, exist_ok=True)
 
 TTS_ENGINE = os.environ.get("TTS_ENGINE", "espeak")
