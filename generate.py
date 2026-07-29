@@ -343,7 +343,7 @@ def _audio_oneshot(lines, workdir):
             else:
                 last = words[-1]; spans.append((last[0] + last[1], last[0] + last[1]))
         spans[-1] = (spans[-1][0], total)
-        return full, spans, total
+        return full, spans, total, words
 
     # Camino B: faltan tiempos de palabra -> reparto proporcional (voz continua).
     sys.stderr.write("[tts] one-shot sin tiempos de palabra; reparto proporcional (voz continua igualmente).\n")
@@ -354,7 +354,7 @@ def _audio_oneshot(lines, workdir):
         d = total * (w / wsum)
         spans.append((t, t + d)); t += d
     spans[-1] = (spans[-1][0], total)
-    return full, spans, total
+    return full, spans, total, None
 
 def _audio_perline(lines, workdir):
     parts = []; spans = []; t = 0.0
@@ -371,21 +371,38 @@ def _audio_perline(lines, workdir):
     full = os.path.join(workdir, "full.wav")
     run(["ffmpeg","-y","-loglevel","error","-f","concat","-safe","0","-i",lst,"-c","copy",full])
     total = dur_of(full)
-    return full, spans, total
+    return full, spans, total, None
 
 # ---------- Render ----------
 def build_video(script, out_path, workdir):
     lines = script["lines"]
-    full_wav, spans, total = build_audio(lines, workdir)
+    full_wav, spans, total, word_times = build_audio(lines, workdir)
 
-    # Subtítulos VERBATIM: se muestra EXACTAMENTE lo que se narra (campo 'voice'),
-    # palabra por palabra, cada frase hasta que empieza la siguiente (sin huecos).
+    # Subtítulos VERBATIM y SINCRONIZADOS AL 100%: cada palabra aparece justo
+    # cuando se pronuncia, usando los tiempos reales de la voz (edge-tts).
+    disp = [w for ln in lines for w in (ln.get("voice", "") or "").split()]
     events = []
-    for i, ln in enumerate(lines):
-        start = spans[i][0]
-        end = spans[i + 1][0] if i + 1 < len(lines) else total
-        txt = (ln.get("voice", "") or ln.get("cap", "")).strip()
-        events.append((start, end, txt, False))
+    if word_times and disp and len(word_times) >= max(1, int(len(disp) * 0.8)):
+        m = min(len(disp), len(word_times))
+        onsets = [word_times[k][0] for k in range(m)]
+        if m < len(disp):                       # raro: faltan tiempos al final
+            t0 = onsets[-1] if onsets else 0.0
+            step = max(0.05, (total - t0) / (len(disp) - m + 1))
+            for j in range(len(disp) - m):
+                onsets.append(t0 + step * (j + 1))
+        for k in range(len(disp)):
+            ws = onsets[k]
+            we = onsets[k + 1] if (k + 1 < len(disp)) else total
+            if we <= ws:
+                we = ws + 0.05
+            events.append((ws, we, disp[k], False))
+    else:
+        # reserva: reparto por línea (si no hubo tiempos de palabra)
+        for i, ln in enumerate(lines):
+            start = spans[i][0]
+            end = spans[i + 1][0] if i + 1 < len(lines) else total
+            txt = (ln.get("voice", "") or ln.get("cap", "")).strip()
+            events.append((start, end, txt, False))
     ass = os.path.join(workdir, "caps.ass")
     build_ass(events, ass, HANDLE, total)
 
