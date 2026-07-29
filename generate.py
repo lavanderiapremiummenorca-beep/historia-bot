@@ -106,47 +106,43 @@ def esc(t):
 HL = "&H0037B6FF&"   # amarillo/ámbar para la palabra activa (BBGGRR)
 WHITE = "&H00FFFFFF&"
 
-def cap_word_events(cap, st, en, words_per_line=2):
-    """Subtítulos animados: la palabra que se pronuncia se resalta y crece."""
+def cap_word_events(cap, st, en, chunk=3):
+    """Subtítulos que aparecen POCO A POCO: en grupos de pocas palabras
+    (máx. 'chunk'), revelando una a una, no toda la frase de golpe."""
     words = cap.split()
     if not words:
         return []
     weights = [len(w) + 1 for w in words]
     tot = sum(weights)
     dur = max(0.001, en - st)
-    slices = []
+    tspan = []
     cur = st
     for wt in weights:
         wd = dur * wt / tot
-        slices.append((cur, cur + wd))
+        tspan.append((cur, cur + wd))
         cur += wd
+    n = len(words)
     evts = []
-    for i, (ws, we) in enumerate(slices):
+    for wi in range(n):
+        ws = tspan[wi][0]
+        we = tspan[wi + 1][0] if wi + 1 < n else en
+        c0 = (wi // chunk) * chunk          # inicio del grupo actual
+        grp_end = min(c0 + chunk, n)
         toks = []
-        for j, w in enumerate(words):
-            if j > 0 and j % words_per_line == 0:
-                toks.append("\\N")
-            wtxt = esc(w.upper())
-            if j == i:
-                # palabra activa: salta (pop con escala) y se resalta en color
-                toks.append("{\\c" + HL + "\\fscx92\\fscy92\\t(0,110,\\fscx110\\fscy110)"
-                            "\\t(110,220,\\fscx103\\fscy103)}" + wtxt
+        for gi in range(c0, grp_end):
+            if gi > wi:
+                break                        # aún no reveladas -> no se muestran
+            w = esc(words[gi].upper())
+            if gi == wi:
+                # palabra recién revelada: pop + color ámbar
+                toks.append("{\\c" + HL + "\\fscx86\\fscy86\\t(0,120,\\fscx108\\fscy108)"
+                            "\\t(120,240,\\fscx100\\fscy100)}" + w
                             + "{\\c" + WHITE + "\\fscx100\\fscy100}")
-            elif j < i:
-                # ya dicha: blanca, ligeramente mayor
-                toks.append("{\\fscx104\\fscy104}" + wtxt + "{\\fscx100\\fscy100}")
             else:
-                # por venir: tenue, para guiar la vista
-                toks.append("{\\alpha&H66&}" + wtxt + "{\\alpha&H00&}")
-        # unir con espacios pero sin espacio extra tras un salto de línea
-        s = ""
-        for k, tk in enumerate(toks):
-            if tk == "\\N":
-                s += "\\N"
-            else:
-                s += ("" if (k == 0 or toks[k-1] == "\\N") else " ") + tk
-        fad = "{\\fad(140,0)}" if i == 0 else ""
-        evts.append((ws, we, fad + s))
+                # ya reveladas dentro del grupo: blancas
+                toks.append(w)
+        fad = "{\\fad(80,0)}" if wi == c0 else ""
+        evts.append((ws, we, fad + " ".join(toks)))
     return evts
 
 def build_ass(events, path, handle=None, total=0.0):
@@ -155,7 +151,7 @@ def build_ass(events, path, handle=None, total=0.0):
 ScriptType: v4.00+
 PlayResX: 1080
 PlayResY: 1920
-WrapStyle: 2
+WrapStyle: 0
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
@@ -504,11 +500,15 @@ def main():
     out = os.path.join(OUTPUT, f"{s['id']}.mp4")
     with tempfile.TemporaryDirectory() as wd:
         total = build_video(s, out, wd)
+    # Asegura #Shorts (ayuda a que YouTube lo clasifique como Short)
+    tags = [h.lstrip("#") for h in s.get("hashtags", [])]
+    if not any(t.lower() == "shorts" for t in tags):
+        tags = ["Shorts"] + tags
     meta = {
         "video": out,
         "title": s["title"],
-        "description": s["description"].rstrip() + "\n\n" + " ".join("#"+h for h in s.get("hashtags",[])),
-        "tags": s.get("hashtags",[]),
+        "description": s["description"].rstrip() + "\n\n" + " ".join("#"+t for t in tags),
+        "tags": tags,
     }
     with open(os.path.join(OUTPUT, f"{s['id']}.json"),"w",encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
