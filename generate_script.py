@@ -15,59 +15,49 @@ _MODEL_CANDIDATES = [
     "gemini-2.5-flash-lite", "gemini-2.0-flash-001", "gemini-1.5-flash",
 ]
 BGS = ["blue", "green", "orange", "purple", "teal", "red"]
-
-# Temas y formatos que rotan por dia para no repetir (anti "contenido inautentico")
+# AMBITOS/EPOCAS que rotan por dia (para forzar variedad, se usan como "a evitar hoy")
 TEMAS = [
-    "la Biblioteca de Alejandria",
-    "los mayas y el cero",
-    "los acueductos romanos",
-    "las piramides de Egipto",
-    "la peste negra",
-    "la imprenta de Gutenberg",
-    "Napoleon y su leyenda",
-    "la Gran Muralla China",
-    "los vikingos",
-    "Cleopatra",
-    "la ruta de la seda",
-    "Pompeya y el Vesubio",
-    "los gladiadores de Roma",
-    "la Revolucion Francesa",
-    "el Imperio Romano",
-    "el hundimiento del Titanic",
-    "los faraones de Egipto",
-    "Leonardo da Vinci",
-    "la llegada a America",
-    "los castillos medievales"
+    "el Antiguo Egipto", "la Antigua Roma", "la Antigua Grecia", "la Edad Media",
+    "el Imperio bizantino", "los vikingos", "las cruzadas", "el descubrimiento de America",
+    "el Imperio mongol", "el Japon de los samurais", "la Revolucion Francesa",
+    "el Imperio persa", "los aztecas, mayas e incas", "la Primera Guerra Mundial",
+    "la Segunda Guerra Mundial", "la Guerra Fria", "el Imperio otomano",
+    "las grandes exploraciones", "la Prehistoria", "el Renacimiento",
 ]
+# ESTILOS que se intercalan cada dia (relato, no lista)
 FORMATOS = [
-    "mito vs realidad", "un dato sorprendente con ejemplo numerico",
-    "el error comun que casi todos cometen", "top 3 rapido",
-    "esto no te lo cuentan", "comparativa antes vs despues",
-    "una pregunta que pica la curiosidad y su respuesta",
+    "el suceso real contado como una escena de cine, momento a momento",
+    "un misterio historico real: lo que se sabe y lo que sigue sin explicacion",
+    "el pequeno detalle que cambio el curso de la historia",
+    "el momento decisivo en la vida de un personaje historico real",
+    "un objeto o lugar cotidiano y la historia oculta que esconde",
+    "desmontar un mito historico muy extendido con la verdad documentada",
 ]
 
 SCHEMA_INSTRUCCION = """
 Devuelve UNICAMENTE un JSON valido (sin texto alrededor) con esta forma exacta:
 {
-  "title": "titulo honesto y con gancho, max 90 caracteres, puede llevar 1 emoji y #shorts",
-  "description": "1-2 frases de valor + CTA. Rigor historico: no inventes fechas ni datos.",
-  "hashtags": ["Shorts", "historia", "curiosidades", "cultura"],  // 3 a 5, sin '#', el primero SIEMPRE 'Shorts'
-  "bg": "uno de: blue, green, orange, purple, teal, red",
-  "broll": "2-4 palabras EN INGLES para metraje de archivo (ej: 'ancient ruins history')",
-  "ai_disclosure": false,
+  "title": "titulo intrigante y fiel, max 90 caracteres, puede llevar 1 emoji y #shorts",
+  "description": "1-2 frases que despierten curiosidad. Anade al final: 'Basado en hechos historicos.'",
+  "hashtags": ["Shorts", "historia", "curiosidades", "sabiasque"],  // 3 a 5, sin '#', el primero SIEMPRE 'Shorts'
+  "bg": "uno de: blue, purple, orange, teal (tonos cinematograficos)",
+  "broll": "2-4 palabras EN INGLES de la escena historica (ej: 'ancient rome ruins')",
+  "broll_list": ["3 o 4 escenas cinematograficas EN INGLES, en orden (ej: 'ancient battle dust', 'candle old manuscript', 'stormy sea sailing ship')"],
+  "ai_disclosure": true,
   "lines": [
-    {"voice": "frase corta que se narra (con numeros en palabras: 'cien euros', no '100')",
-     "cap": "subtitulo MUY corto en pantalla (2-4 palabras, puede llevar cifras)"}
+    {"voice": "frase corta y narrativa (numeros en palabras: 'tres mil', no '3000')",
+     "cap": "subtitulo MUY corto en pantalla (2-4 palabras)"}
   ]
 }
-Reglas del guion:
-- Entre 10 y 13 lineas. Cada 'voice' es una frase corta y natural (el video debe durar 20-40 s).
-- La PRIMERA linea es el gancho: sin saludos ni intro, engancha en el primer segundo.
-- La ULTIMA linea es el CTA: invita a seguir ("Sigueme para tu dosis diaria de historia") o a comentar.
-- 'cap' nunca lleva emojis (la fuente no los dibuja). 'voice' escribe los numeros con letras.
-- Espanol de Espana, tono narrador cercano e intrigante. Aporta un dato concreto y verificable.
+Reglas del guion (formato 'Esto paso de verdad'):
+- Entre 8 y 11 lineas. Cuenta UNA historia real con principio, tension y desenlace (el video dura 30-45 s).
+- NO ES UNA LISTA: prohibido 'sabias que', 'top 3' o 'datos sueltos'. Es un RELATO que atrapa.
+- RIGOR: solo hechos reales y documentados. Si es leyenda o discutido, dilo ('cuenta la leyenda que...'). Nunca inventes para que quede mejor.
+- APERTURA (linea 1, VARIADA cada dia, nunca identica a la de ayer): un gancho de curiosidad que promete algo increible y REAL. Ej: 'Esto paso de verdad, y casi nadie lo sabe.'
+- CIERRE (ultima linea, VARIADO cada dia): remata con el giro o la moraleja e invita a reaccionar. Ej: 'La realidad supera a la ficcion. Lo sabias?'
+- Tono de narrador de documental: intrigante, con ritmo. 'cap' sin emojis. 'voice' con numeros en letras.
+- Espanol de Espana. Respeto absoluto a tragedias, guerras y victimas.
 """
-
 def _run_seed():
     try:
         return int(os.environ.get("GITHUB_RUN_NUMBER", "0"))
@@ -149,7 +139,7 @@ def _validate(s):
         hs = ["Shorts"] + [h for h in hs if h.lower() != "shorts"]
     s["hashtags"] = hs[:5]
     assert s.get("title"), "sin titulo"
-    s.setdefault("description", "Curiosidad historica en 30 segundos. Sigueme para tu dosis diaria de historia.")
+    s.setdefault("description", "Una historia real que no te contaron. Basado en hechos historicos.")
     s["id"] = "ia-" + datetime.date.today().isoformat()
     s.pop("chart", None)
     return s
@@ -161,7 +151,7 @@ def generate():
     try:
         master = open(os.path.join(BASE, "PROMPT-MAESTRO.md"), encoding="utf-8").read()
     except Exception:
-        master = "Eres un productor experto de YouTube Shorts de historia y curiosidades en espanol."
+        master = "Eres un narrador experto de historia para YouTube Shorts, en espanol, que cuenta hechos reales como escenas de cine."
     formato = random.choice(FORMATOS)
     hoy = datetime.date.today().isoformat()
     # Usamos TEMAS solo como "lo obvio a EVITAR", para empujar novedad
@@ -169,13 +159,11 @@ def generate():
     seed = _run_seed()
     prompt = (master
               + f"\n\n---\nTAREA DE HOY ({hoy}):\n"
-              + "ELIGE TU MISMO un tema NUEVO, especifico y original dentro de la tematica "
-                "de ESTE canal (segun las instrucciones de arriba). Sorprendeme con un angulo "
-                "fresco y concreto; evita los topicos mas manidos y ya vistos.\n"
-              + (f"Para forzar variedad, HOY NO trates sobre estos (elige algo distinto): {evitar}.\n" if evitar else "")
-              + f"Desarrollalo con este enfoque/formato: {formato}.\n"
-              + "Debe ser un tema DISTINTO cada dia; se original.\n"
-              + "Cumple TODAS las reglas de arriba (cumplimiento primero, luego viralidad).\n"
+              + "ELIGE TU MISMO un hecho historico REAL, poco conocido o sorprendente, y "
+                "cuentalo como una escena de cine. Debe ser rigurosamente cierto.\n"
+              + (f"Para forzar variedad, HOY evita estos ambitos (elige otro distinto): {evitar}.\n" if evitar else "")
+              + f"Cuenta la historia con este ESTILO de hoy: {formato}.\n"
+              + "Apertura y cierre VARIADOS (nunca los de ayer); titulo y descripcion UNICOS de hoy. Que HOY se note claramente distinto a cualquier dia anterior. Es un RELATO, no una lista de datos.\n"
               + SCHEMA_INSTRUCCION)
     try:
         raw = _call_gemini(prompt, key)
