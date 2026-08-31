@@ -24,7 +24,7 @@ jobs:
           ELEVEN_VOICE_ID: "PEGA_AQUI_EL_VOICE_ID"
           ELEVEN_MODEL: eleven_flash_v2_5
           FAL_KEY: ${{ secrets.FAL_KEY }}
-          AI_CLIPS: "2"
+          AI_CLIPS: "4"
           EDGE_VOICE: es-ES-AlvaroNeural
           EDGE_RATE: "+0%"
           CHANNEL_HANDLE: ${{ secrets.CHANNEL_HANDLE }}
