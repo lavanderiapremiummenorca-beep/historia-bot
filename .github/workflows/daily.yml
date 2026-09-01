@@ -1,8 +1,8 @@
 name: Publicar Short diario
 on:
   schedule:
-    - cron: "13 8 * * *"
-  workflow_dispatch:
+    - cron: "13 8 * * *"     # ~10:13 Espana (UTC). Cambia hora/minuto si quieres, pero evita el minuto :00.
+  workflow_dispatch:          # boton para lanzarlo a mano cuando quieras
 permissions:
   contents: read
 jobs:
@@ -38,7 +38,7 @@ jobs:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          YT_PRIVACY: private
+          YT_PRIVACY: public
           YT_CATEGORY: "27"
         run: python upload.py
       - name: Guardar copia en Google Drive (para Repurpose -> TikTok + Instagram)
