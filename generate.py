@@ -367,10 +367,21 @@ def _falai_clip(prompt, workdir, idx):
     import time
     model = os.environ.get("FAL_MODEL", "fal-ai/kling-video/v2.5-turbo/pro/text-to-video")
     dur = os.environ.get("FAL_DURATION", "5")
-    style = os.environ.get("FAL_STYLE", "cinematic, slow motion, highly detailed, soft natural light")
-    full = (prompt + ", " + style).strip(", ")
+    # --- Formula cinematografica (realismo por imperfeccion, estilo Mirko):
+    # la ESCENA la pone el guion; aqui anadimos plano/lente/luz/grado/grano/camara.
+    grade = os.environ.get("FAL_STYLE",
+        "warm and slightly desaturated cozy tones, gentle contrast")
+    look = os.environ.get("FAL_LOOK",
+        "cinematic film still, shot on anamorphic lens, shallow depth of field, "
+        "soft volumetric haze, natural directional lighting, subtle handheld camera motion, "
+        "fine 35mm film grain, photorealistic with natural imperfections")
+    full = f"{prompt}. {look}, {grade}. no text, no captions, no watermark"
+    neg = os.environ.get("FAL_NEG",
+        "cartoon, 3d render, cgi, plastic skin, waxy, over-smooth, oversaturated, "
+        "flat lighting, low quality, blurry, distorted, deformed, text, watermark, logo")
     try:
-        body = json.dumps({"prompt": full, "duration": str(dur), "aspect_ratio": "9:16"}).encode()
+        body = json.dumps({"prompt": full, "duration": str(dur), "aspect_ratio": "9:16",
+                           "negative_prompt": neg}).encode()
         req = urllib.request.Request("https://queue.fal.run/" + model, data=body,
               headers={"Authorization": "Key " + key, "Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=30) as r:
@@ -410,9 +421,192 @@ def _falai_clip(prompt, workdir, idx):
         sys.stderr.write(f"[bg] fal.ai fallo ({e}); uso stock.\n")
         return None
 
+def _wiki_photo(query, dst):
+    """Imagen REAL de archivo desde Wikimedia Commons (gratis, sin clave). True/False."""
+    if not query:
+        return False
+    try:
+        api = "https://commons.wikimedia.org/w/api.php"
+        params = {"action": "query", "format": "json", "generator": "search",
+                  "gsrsearch": query, "gsrnamespace": "6", "gsrlimit": "8",
+                  "prop": "imageinfo", "iiprop": "url|mime", "iiurlwidth": "1280"}
+        url = api + "?" + urllib.parse.urlencode(params)
+        req = urllib.request.Request(url, headers={"User-Agent": "canal-bot/1.0"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            data = json.loads(r.read().decode())
+        for p in (data.get("query", {}).get("pages", {}) or {}).values():
+            ii = (p.get("imageinfo") or [{}])[0]
+            u = ii.get("thumburl") or ii.get("url"); mime = ii.get("mime", "")
+            if u and mime.startswith("image") and ("jpeg" in mime or "png" in mime):
+                rq = urllib.request.Request(u, headers={"User-Agent": "canal-bot/1.0"})
+                with urllib.request.urlopen(rq, timeout=25) as rr, open(dst, "wb") as f:
+                    f.write(rr.read())
+                if os.path.getsize(dst) > 8000:
+                    return True
+    except Exception as e:
+        sys.stderr.write(f"[foto] wiki fallo ({e})\n")
+    return False
+
+def _pexels_photo(query, dst):
+    """Foto de stock desde Pexels (usa PEXELS_API_KEY, ya configurada)."""
+    key = os.environ.get("PEXELS_API_KEY")
+    if not key or not query:
+        return False
+    try:
+        url = "https://api.pexels.com/v1/search?" + urllib.parse.urlencode(
+            {"query": query, "orientation": "portrait", "per_page": 6})
+        req = urllib.request.Request(url, headers={"Authorization": key})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = json.loads(r.read().decode())
+        for ph in data.get("photos", []):
+            src = ph.get("src") or {}
+            u = src.get("large2x") or src.get("large") or src.get("original")
+            if u:
+                rq = urllib.request.Request(u, headers={"User-Agent": "canal-bot/1.0"})
+                with urllib.request.urlopen(rq, timeout=25) as rr, open(dst, "wb") as f:
+                    f.write(rr.read())
+                if os.path.getsize(dst) > 8000:
+                    return True
+    except Exception as e:
+        sys.stderr.write(f"[foto] pexels fallo ({e})\n")
+    return False
+
+def _falai_image(prompt, dst, idx=0):
+    """Genera UNA imagen cinematografica con IA (fal.ai, p.ej. Flux). ~15x mas
+    barata que un clip de video (~$0.03). Aplica la formula de realismo de Mirko
+    (plano/lente/luz/grano/color). Devuelve True/False."""
+    key = os.environ.get("FAL_KEY", "").strip()
+    if not key or not prompt:
+        return False
+    import time
+    model = os.environ.get("FAL_IMG_MODEL", "fal-ai/flux/dev")
+    grade = os.environ.get("FAL_STYLE", "warm cinematic tones, gentle contrast")
+    look = os.environ.get("FAL_LOOK",
+        "cinematic film still, shot on anamorphic lens, shallow depth of field, "
+        "soft volumetric haze, natural directional lighting, fine 35mm film grain, "
+        "photorealistic with natural imperfections")
+    full = f"{prompt}. {look}, {grade}. no text, no captions, no watermark"
+    try:
+        w = int(os.environ.get("FAL_IMG_W", "768"))
+        h = int(os.environ.get("FAL_IMG_H", "1344"))
+        body = json.dumps({"prompt": full, "num_images": 1,
+                           "image_size": {"width": w, "height": h},
+                           "enable_safety_checker": True}).encode()
+        req = urllib.request.Request("https://queue.fal.run/" + model, data=body,
+              headers={"Authorization": "Key " + key, "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            sub = json.loads(r.read().decode())
+        status_url = sub.get("status_url"); response_url = sub.get("response_url")
+        if not status_url or not response_url:
+            return False
+        for _ in range(40):                     # imagenes: rapido
+            rq = urllib.request.Request(status_url, headers={"Authorization": "Key " + key})
+            with urllib.request.urlopen(rq, timeout=30) as r:
+                st = json.loads(r.read().decode())
+            s = st.get("status")
+            if s == "COMPLETED":
+                break
+            if s in ("FAILED", "ERROR", "CANCELED"):
+                sys.stderr.write(f"[img] fal.ai estado {s}\n"); return False
+            time.sleep(3)
+        else:
+            return False
+        rq = urllib.request.Request(response_url, headers={"Authorization": "Key " + key})
+        with urllib.request.urlopen(rq, timeout=60) as r:
+            res = json.loads(r.read().decode())
+        imgs = res.get("images") or []
+        url = (imgs[0].get("url") if imgs and isinstance(imgs[0], dict) else None) \
+              or ((res.get("image") or {}).get("url"))
+        if not url:
+            return False
+        rq2 = urllib.request.Request(url, headers={"User-Agent": "canal-bot/1.0"})
+        with urllib.request.urlopen(rq2, timeout=90) as r, open(dst, "wb") as f:
+            f.write(r.read())
+        if os.path.getsize(dst) > 8000:
+            print(f"[img] imagen IA para: {prompt[:44]}")
+            return True
+        return False
+    except Exception as e:
+        sys.stderr.write(f"[img] fal.ai imagen fallo ({e})\n")
+        return False
+
+def _photo_sources(queries, workdir):
+    """Una imagen por escena. Prioridad: IA (fal.ai, premium y barato) ->
+    Wikimedia (archivo real) -> Pexels (stock)."""
+    out = []
+    for i, q in enumerate(queries):
+        dst = os.path.join(workdir, f"img_{i}.jpg")
+        if _falai_image(q, dst, i) or _wiki_photo(q, dst) or _pexels_photo(q, dst):
+            out.append(dst)
+    return out
+
+def _kenburns_clip(img, dur, out, idx=0):
+    """Imagen fija -> clip 1080x1920 con movimiento Ken Burns (zoom lento)."""
+    frames = max(1, int(dur * 30))
+    z = "min(1.04+0.0016*in,1.28)" if idx % 2 == 0 else "max(1.28-0.0016*in,1.04)"
+    # Input ya cercano al tamano de salida -> zoompan mucho mas rapido.
+    vf = ("scale=1350:2400:force_original_aspect_ratio=increase,crop=1350:2400,"
+          f"zoompan=z='{z}':d={frames}:s=1080x1920:fps=30:"
+          "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)',"
+          "eq=brightness=-0.02:contrast=1.05:saturation=1.06,setsar=1")
+    run(["ffmpeg", "-y", "-loglevel", "error", "-loop", "1", "-t", f"{dur:.2f}", "-i", img,
+         "-vf", vf, "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22",
+         "-pix_fmt", "yuv420p", out])
+
+def _build_photo_bg(script, total, workdir, spans):
+    """Fondo a base de FOTOS reales (modo 'photos', ideal para Historia).
+    Una foto por grupo de lineas, con Ken Burns. None si no consigue imagenes."""
+    queries = [q for q in (script.get("broll_list") or [script.get("broll")]) if q]
+    if not queries:
+        return None
+    nlines = len(spans)
+    n = max(1, min(len(queries), int(round(total / 3.5)) or 1, nlines))
+    groups = _groups(nlines, n)
+    n = len(groups)
+    imgs = _photo_sources(queries[:n], workdir)
+    if not imgs:
+        return None
+    segs = []
+    for k, g in enumerate(groups):
+        if k >= len(imgs):
+            break
+        start = spans[g[0]][0]
+        end = total if k == len(groups) - 1 else spans[groups[k + 1][0]][0]
+        dur = max(0.9, end - start)
+        out = os.path.join(workdir, f"ph_{k}.mp4")
+        try:
+            _kenburns_clip(imgs[k], dur + 0.1, out, k)
+            if _valid_video(out, 0.3):
+                segs.append(out)
+        except Exception as e:
+            sys.stderr.write(f"[bg-foto] segmento {k} fallo ({e})\n")
+    if not segs:
+        return None
+    lst = os.path.join(workdir, "phlist.txt")
+    with open(lst, "w") as f:
+        for s in segs:
+            f.write(f"file '{s}'\n")
+    bgv = os.path.join(workdir, "bg.mp4")
+    try:
+        run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
+             "-i", lst, "-c", "copy", bgv])
+    except Exception as e:
+        sys.stderr.write(f"[bg-foto] concat fallo ({e})\n")
+        return None
+    if not _valid_video(bgv, 1.0):
+        return None
+    print(f"[bg] modo FOTOS: {len(segs)} imagenes reales")
+    return bgv
+
+
 def build_background(script, total, workdir, spans):
     """Fondo dinámico: un clip por IDEA, con push-in. Usa metraje IA (Kling) para los
     primeros AI_CLIPS 'hero' si hay FAL_KEY, y stock para el resto. None si no hay clips."""
+    if os.environ.get("VISUAL_MODE", "video").strip().lower() == "photos":
+        pb = _build_photo_bg(script, total, workdir, spans)
+        if pb:
+            return pb
+        # si el modo fotos no consigue imagenes, cae al modo video normal
     srcs = []
     blist = script.get("broll_list")
     try:
@@ -599,8 +793,10 @@ def build_video(script, out_path, workdir):
     if bgv:
         inputs = ["-i", bgv]
         # tpad: congela el último fotograma durante la cola (el fondo nunca se queda corto)
-        base_vf = ("eq=brightness=-0.03:saturation=1.18:contrast=1.05,"
-                   "drawbox=0:0:1080:1920:color=black@0.28:t=fill,"
+        base_vf = ("scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,"
+                   "eq=brightness=0.04:saturation=1.18:contrast=1.06,"
+                   "vignette=PI/6,"
+                   "drawbox=0:0:1080:1920:color=black@0.12:t=fill,"
                    f"tpad=stop_mode=clone:stop_duration={TAIL+1.0:.2f},"
                    f"subtitles='{ass_esc}',{vfade},setsar=1")
     else:
