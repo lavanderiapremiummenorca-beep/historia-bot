@@ -24,6 +24,7 @@ jobs:
           ELEVEN_VOICE_ID: "PEGA_AQUI_EL_VOICE_ID"
           ELEVEN_MODEL: eleven_flash_v2_5
           FAL_KEY: ${{ secrets.FAL_KEY }}
+          VISUAL_MODE: photos
           AI_CLIPS: "4"
           EDGE_VOICE: es-ES-AlvaroNeural
           EDGE_RATE: "+0%"
@@ -53,4 +54,3 @@ jobs:
           name: video-del-dia
           path: output/*.mp4
           retention-days: 7
-          
