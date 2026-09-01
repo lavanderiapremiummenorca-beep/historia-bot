@@ -117,7 +117,19 @@ def _model_order(key):
     for m in _MODEL_CANDIDATES:
         if m not in order:
             order.append(m)
-    for m in _list_models(key):
+    disc = _list_models(key)
+    # Prioriza Gemini 'flash', luego otros Gemini, luego el resto.
+    # Los 'gemma' (no dan JSON fiable) van al final.
+    for m in disc:
+        if "gemini" in m and "flash" in m and m not in order:
+            order.append(m)
+    for m in disc:
+        if "gemini" in m and m not in order:
+            order.append(m)
+    for m in disc:
+        if "gemma" not in m and m not in order:
+            order.append(m)
+    for m in disc:
         if m not in order:
             order.append(m)
     return order
@@ -134,16 +146,41 @@ def _post_generate(model, prompt, key):
         data = json.loads(r.read().decode())
     return data["candidates"][0]["content"]["parts"][0]["text"]
 
-def _call_gemini(prompt, key):
+def _extract_json(txt):
+    """Saca un JSON valido aunque el modelo lo envuelva en ```json ... ``` o texto."""
+    if not txt:
+        return None
+    t = txt.strip()
+    if t.startswith("```"):
+        t = t.strip("`")
+        if t[:4].lower() == "json":
+            t = t[4:]
+    i, j = t.find("{"), t.rfind("}")
+    if i != -1 and j != -1 and j > i:
+        t = t[i:j + 1]
+    try:
+        return json.loads(t)
+    except Exception:
+        return None
+
+def _gen_json(prompt, key):
+    """Prueba modelos hasta obtener un JSON valido. Salta los que fallen o
+    devuelvan basura (p.ej. gemma con respuesta vacia). None si ninguno lo da."""
     last = None
     for model in _model_order(key):
         try:
             txt = _post_generate(model, prompt, key)
-            sys.stderr.write(f"[ai] modelo usado: {model}\n")
-            return txt
         except Exception as e:
             last = e
-    raise RuntimeError(f"ningun modelo Gemini respondio: {last}")
+            continue
+        obj = _extract_json(txt)
+        if isinstance(obj, dict) and obj.get("lines"):
+            sys.stderr.write(f"[ai] modelo usado: {model}\n")
+            return obj
+        sys.stderr.write(f"[ai] {model} no dio JSON valido; pruebo otro.\n")
+    if last:
+        sys.stderr.write(f"[ai] ultimo error: {last}\n")
+    return None
 
 
 def _validate(s, tema="", cta="", broll_en=""):
@@ -248,8 +285,9 @@ def generate():
                 "el formato, el gancho y el cierre que se te asignan. Todo debe ser historia REAL.\n"
               + _schema(tema, broll_en, formato, gancho, cta))
     try:
-        raw = _call_gemini(prompt, key)
-        s = json.loads(raw)
+        s = _gen_json(prompt, key)
+        if not s:
+            raise RuntimeError("ningun modelo dio JSON valido")
         s = _validate(s, tema=tema, cta=cta, broll_en=broll_en)
         return s
     except Exception as e:
