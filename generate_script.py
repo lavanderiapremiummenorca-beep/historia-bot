@@ -245,7 +245,7 @@ Devuelve UNICAMENTE un JSON valido (sin texto alrededor) con esta forma exacta:
   "hashtags": ["Shorts", "historia", "curiosidades", "sabiasque", "datoscuriosos"],
   "bg": "uno de: orange, red, purple, teal",
   "broll": "{broll_en}",
-  "broll_list": ["una ESCENA para RECREAR con IA por CADA dato, EN INGLES, concreta, con ACCION y lugar y epoca (ej: 'roman gladiators fighting in the colosseum arena, roaring crowd', 'julius caesar assassinated in the roman senate', 'a roman legion marching through a burning city at dusk'). En orden, 3 o 4. Describe una imagen VIVA, como un plano de cine."],
+  "broll_list": ["una ESCENA para RECREAR con IA por CADA dato, EN INGLES, concreta, con ACCION y lugar y epoca (ej: 'roman gladiators fighting in the colosseum arena, roaring crowd', 'julius caesar assassinated in the roman senate', 'a roman legion marching through a burning city at dusk'). En orden. Devuelve SIEMPRE EXACTAMENTE 4 escenas distintas (una por dato/momento). Describe una imagen VIVA, como un plano de cine."],
   "ai_disclosure": false,
   "lines": [
     {{"voice": "frase que se narra (numeros en palabras)", "cap": "subtitulo corto en pantalla (2-4 palabras)"}}
