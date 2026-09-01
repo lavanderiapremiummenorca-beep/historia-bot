@@ -234,7 +234,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Main,{FONT},76,&H000AB6FF,&H000AB6FF,&H00101010,&H64000000,-1,0,0,0,100,100,2,0,1,3,3,2,150,150,470,1
+Style: Main,{FONT},82,&H000AB6FF,&H000AB6FF,&H00101010,&H64000000,-1,0,0,0,100,100,2,0,1,3,3,2,150,150,470,1
 Style: Brand,{FONT},42,&H50FFFFFF,&H50FFFFFF,&H90000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,0,8,40,40,80,1
 
 [Events]
@@ -487,8 +487,8 @@ def _falai_image(prompt, dst, idx=0):
         "photorealistic with natural imperfections")
     full = f"{prompt}. {look}, {grade}. no text, no captions, no watermark"
     try:
-        w = int(os.environ.get("FAL_IMG_W", "768"))
-        h = int(os.environ.get("FAL_IMG_H", "1344"))
+        w = int(os.environ.get("FAL_IMG_W", "896"))
+        h = int(os.environ.get("FAL_IMG_H", "1568"))
         body = json.dumps({"prompt": full, "num_images": 1,
                            "image_size": {"width": w, "height": h},
                            "enable_safety_checker": True}).encode()
@@ -544,14 +544,22 @@ def _kenburns_clip(img, dur, out, idx=0):
     """Imagen fija -> clip 1080x1920 con movimiento Ken Burns (zoom lento).
     d=1 (un frame de salida por frame de entrada) + input a 30fps -> el clip dura
     EXACTAMENTE 'dur'. (Con d=frames se disparaba a 40s+ y solo salia la 1a imagen.)"""
-    z = "min(1.04+0.0018*on,1.30)" if idx % 2 == 0 else "max(1.30-0.0018*on,1.04)"
-    vf = ("scale=1350:2400:force_original_aspect_ratio=increase,crop=1350:2400,"
-          f"zoompan=z='{z}':d=1:s=1080x1920:fps=30:"
-          "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)',"
+    F = max(1, int(round(dur * 30)))
+    # Zoom mas marcado (se nota el movimiento) + paneo que cruza la imagen.
+    # El paneo usa (iw-iw/zoom) como recorrido => NUNCA se sale (sin bordes negros).
+    if idx % 2 == 0:
+        z = "min(1.07+0.0032*on,1.40)"
+        px = f"(iw-iw/zoom)*on/{F}"          # izquierda -> derecha
+    else:
+        z = "max(1.40-0.0032*on,1.07)"
+        px = f"(iw-iw/zoom)*(1-on/{F})"      # derecha -> izquierda
+    py = "(ih-ih/zoom)/2"
+    vf = ("scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,"
+          f"zoompan=z='{z}':d=1:s=1080x1920:fps=30:x='{px}':y='{py}',"
           "eq=brightness=-0.02:contrast=1.05:saturation=1.06,setsar=1")
     run(["ffmpeg", "-y", "-loglevel", "error", "-loop", "1", "-framerate", "30",
          "-t", f"{dur:.2f}", "-i", img, "-vf", vf, "-an", "-c:v", "libx264",
-         "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p", "-r", "30", out])
+         "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p", "-r", "30", out])
 
 def _build_photo_bg(script, total, workdir, spans):
     """Fondo a base de FOTOS reales (modo 'photos', ideal para Historia).
@@ -591,8 +599,8 @@ def _build_photo_bg(script, total, workdir, spans):
         # RE-CODIFICAR (no '-c copy'): al pegar clips de zoompan, la copia rapida
         # solo conservaba el primero y congelaba el resto. Recodificando entran TODOS.
         run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
-             "-i", lst, "-r", "30", "-c:v", "libx264", "-preset", "veryfast",
-             "-crf", "20", "-pix_fmt", "yuv420p", bgv])
+             "-i", lst, "-r", "30", "-c:v", "libx264", "-preset", "medium",
+             "-crf", "18", "-pix_fmt", "yuv420p", bgv])
     except Exception as e:
         sys.stderr.write(f"[bg-foto] concat fallo ({e})\n")
         return None
