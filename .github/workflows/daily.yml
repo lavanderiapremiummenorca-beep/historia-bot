@@ -24,6 +24,7 @@ jobs:
           ELEVEN_VOICE_ID: "y6WtESLj18d0diFRruBs"
           ELEVEN_MODEL: eleven_flash_v2_5
           FAL_KEY: ${{ secrets.FAL_KEY }}
+          AI_HERO_CLIPS: "0"
           VISUAL_MODE: photos
           EDGE_VOICE: es-ES-AlvaroNeural
           EDGE_RATE: "+0%"
