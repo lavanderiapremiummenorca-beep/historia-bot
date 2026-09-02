@@ -1,8 +1,8 @@
 name: Publicar Short diario
 on:
   schedule:
-    - cron: "13 8 * * *"     # ~10:13 Espana (UTC). Cambia hora/minuto si quieres, pero evita el minuto :00.
-  workflow_dispatch:          # boton para lanzarlo a mano cuando quieras
+    - cron: "13 8 * * *"
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -24,7 +24,9 @@ jobs:
           ELEVEN_VOICE_ID: "DdKbXdRlBmj7Ty7N0FVr"
           ELEVEN_MODEL: eleven_flash_v2_5
           FAL_KEY: ${{ secrets.FAL_KEY }}
-          FAL_I2V_MODEL: "fal-ai/kling-video/v1.6/standard/image-to-video"
+          FAL_I2V_MODEL: "fal-ai/kling-video/v2.5-turbo/pro/image-to-video"
+          FAL_I2V_DURATION: "10"
+          FAL_I2V_PROMPT: "cinematic, natural realistic movement, smooth dynamic camera, subjects moving and gesturing naturally, dramatic lighting, film look, high detail"
           VISUAL_MODE: aivideo
           AI_CLIPS: "4"
           EDGE_VOICE: es-ES-AlvaroNeural
