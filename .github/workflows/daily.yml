@@ -24,7 +24,8 @@ jobs:
           ELEVEN_VOICE_ID: "DdKbXdRlBmj7Ty7N0FVr"
           ELEVEN_MODEL: eleven_flash_v2_5
           FAL_KEY: ${{ secrets.FAL_KEY }}
-          VISUAL_MODE: photos
+          FAL_I2V_MODEL: "fal-ai/kling-video/v1.6/standard/image-to-video"
+          VISUAL_MODE: aivideo
           AI_CLIPS: "4"
           EDGE_VOICE: es-ES-AlvaroNeural
           EDGE_RATE: "+0%"
