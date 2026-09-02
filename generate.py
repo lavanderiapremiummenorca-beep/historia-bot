@@ -489,8 +489,13 @@ def _falai_image(prompt, dst, idx=0):
     try:
         w = int(os.environ.get("FAL_IMG_W", "896"))
         h = int(os.environ.get("FAL_IMG_H", "1568"))
+        neg = os.environ.get("FAL_IMG_NEG",
+            "deformed, distorted faces, extra limbs, extra fingers, mutated hands, "
+            "bad anatomy, disfigured, ugly, low quality, blurry, crowd of faces, "
+            "cartoon, 3d render, cgi, plastic, watermark, text")
         body = json.dumps({"prompt": full, "num_images": 1,
                            "image_size": {"width": w, "height": h},
+                           "negative_prompt": neg,
                            "enable_safety_checker": True}).encode()
         req = urllib.request.Request("https://queue.fal.run/" + model, data=body,
               headers={"Authorization": "Key " + key, "Content-Type": "application/json"})
