@@ -617,18 +617,18 @@ def _kenburns_clip(img, dur, out, idx=0):
     d=1 (un frame de salida por frame de entrada) + input a 30fps -> el clip dura
     EXACTAMENTE 'dur'. (Con d=frames se disparaba a 40s+ y solo salia la 1a imagen.)"""
     F = max(1, int(round(dur * 30)))
-    step = 0.12 / F            # zoom total ~12% a lo largo del clip (lento y constante)
-    # Zoom+paneo suave. El paneo usa (iw-iw/zoom) => NUNCA se sale (sin bordes negros).
-    # TRUCO clave para que el movimiento sea ULTRA fino: el zoompan se renderiza al
-    # DOBLE de resolucion (entrada 2160x3840) y se baja a 1080x1920; ese "supersampling"
-    # elimina el tembleque/escalones tipicos del zoompan y deja el zoom sedoso.
+    step = 0.14 / F            # zoom total ~14% a lo largo del clip (lento y constante)
+    amp = 0.18                 # deriva respecto al CENTRO (baja = NO se va del personaje)
+    # El encuadre se mantiene CENTRADO en el sujeto: push-in/pull-back suave con una
+    # deriva minima (no cruza la imagen de lado a lado). Supersampling 2x (2160x3840
+    # -> 1080x1920) para que el movimiento salga sedoso, sin tembleque.
     if idx % 2 == 0:
-        z = f"min(1.04+{step:.6f}*on,1.18)"
-        px = f"(iw-iw/zoom)*on/{F}"          # izquierda -> derecha
+        z = f"min(1.05+{step:.6f}*on,1.22)"                         # se ACERCA (push-in)
+        px = f"(iw-iw/zoom)/2+(iw-iw/zoom)*{amp}*(on/{F}-0.5)"      # leve deriva ->
     else:
-        z = f"max(1.18-{step:.6f}*on,1.04)"
-        px = f"(iw-iw/zoom)*(1-on/{F})"      # derecha -> izquierda
-    py = "(ih-ih/zoom)/2"
+        z = f"max(1.22-{step:.6f}*on,1.05)"                         # se ALEJA (pull-back)
+        px = f"(iw-iw/zoom)/2-(iw-iw/zoom)*{amp}*(on/{F}-0.5)"      # leve deriva <-
+    py = "(ih-ih/zoom)/2"                                           # vertical centrado
     vf = ("scale=2160:3840:force_original_aspect_ratio=increase,crop=2160:3840,"
           f"zoompan=z='{z}':d=1:s=1080x1920:fps=30:x='{px}':y='{py}',"
           "eq=brightness=-0.02:contrast=1.05:saturation=1.06,setsar=1")
@@ -651,6 +651,17 @@ def _build_photo_bg(script, total, workdir, spans):
     if not imgs:
         return None
     aivideo = os.environ.get("VISUAL_MODE", "video").strip().lower() == "aivideo"
+    # HERO opcional: la IA marca 1 escena (video_idx) que se anima como VIDEO aunque
+    # el modo sea 'photos'. Tope AI_HERO_CLIPS (por defecto 1) para no disparar coste.
+    try:
+        hero_max = int(os.environ.get("AI_HERO_CLIPS", "1"))
+    except ValueError:
+        hero_max = 1
+    try:
+        video_idx = int(script.get("video_idx", -1))
+    except (TypeError, ValueError):
+        video_idx = -1
+    hero_done = 0
     segs = []
     for k, g in enumerate(groups):
         if k >= len(imgs):
@@ -660,15 +671,18 @@ def _build_photo_bg(script, total, workdir, spans):
         end = total if k == len(groups) - 1 else spans[groups[k + 1][0]][0]
         dur = max(0.9, end - start)
         out = os.path.join(workdir, f"ph_{k}.mp4")
+        want_video = aivideo or (k == video_idx and hero_done < hero_max)
         try:
             done = False
-            if aivideo and img_url:            # imagen->video (movimiento real, barato)
+            if want_video and img_url:          # imagen->video (movimiento real)
                 prompt_k = queries[k] if k < len(queries) else ""
                 raw = _falai_img2video(img_url, prompt_k, workdir, k)
                 if raw:
                     _norm_to_vertical(raw, dur + 0.1, out)
                     done = _valid_video(out, 0.3)
-            if not done:                        # plan B: zoom/paneo sobre la imagen
+                    if done and not aivideo:
+                        hero_done += 1
+            if not done:                        # plan B: zoom centrado sobre la imagen
                 _kenburns_clip(img_path, dur + 0.1, out, k)
             if _valid_video(out, 0.3):
                 segs.append(out)

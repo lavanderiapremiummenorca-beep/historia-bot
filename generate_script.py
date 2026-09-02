@@ -228,6 +228,10 @@ def _validate(s, tema="", cta="", broll_en=""):
     elif broll_en:
         s["broll_list"] = [broll_en]; s["broll"] = broll_en
 
+    try:
+        s["video_idx"] = int(s.get("video_idx", -1))
+    except (TypeError, ValueError):
+        s["video_idx"] = -1
     s["ai_disclosure"] = False
     s["id"] = "ia-" + datetime.date.today().isoformat()
     s.pop("chart", None)
@@ -245,6 +249,7 @@ Devuelve UNICAMENTE un JSON valido (sin texto alrededor) con esta forma exacta:
   "broll": "{broll_en}",
   "broll_list": ["una ESCENA para RECREAR con IA por CADA dato, EN INGLES, concreta, con ACCION y lugar y epoca (ej: 'roman gladiators fighting in the colosseum arena, roaring crowd', 'julius caesar assassinated in the roman senate', 'a roman legion marching through a burning city at dusk'). En el MISMO orden que 'lines'. Devuelve UNA escena por CADA linea de 'lines' (mismo numero de escenas que de lineas), y cada escena debe mostrar EXACTAMENTE lo que se narra en esa linea. Describe una imagen VIVA, como un plano de cine."],
   "ai_disclosure": false,
+  "video_idx": "indice 0-based de la ESCENA de broll_list que MAS ganaria con MOVIMIENTO de video real (la mas dinamica o impactante). Devuelve -1 si ninguna lo necesita de verdad. Elige como MUCHO una.",
   "lines": [
     {{"voice": "frase que se narra (numeros en palabras)", "cap": "subtitulo corto en pantalla (2-4 palabras)"}}
   ]
