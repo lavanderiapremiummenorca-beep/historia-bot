@@ -265,6 +265,7 @@ GUION DE HOY (canal de HISTORIA, formato viral, DISTINTO a cualquier dia anterio
 - Entre 5 y 8 lineas en total. Frases cortas y con energia (ritmo rapido de Short, 30-45 s).
 - Tono: divulgacion cercana, con chispa, que engancha. Espanol de Espana. NO academico ni aburrido.
 - 'cap' sin emojis. 'voice' escribe los numeros con letras.
+- SEGURIDAD (obligatorio): las escenas deben ser APTAS PARA YOUTUBE Y PUBLICIDAD. Dramaticas y con fuerza, pero SIN sangre, visceras, heridas, torturas explicitas, cadaveres ni desnudos. Sugiere el horror con atmosfera (sombras, gestos, reacciones), NO lo muestres de forma explicita.
 - CRITICO: cada escena de 'broll_list' debe MOSTRAR EXACTAMENTE el dato que se narra en esa parte, EN EL MISMO ORDEN (si el dato es la letrina, dibuja la letrina medieval sobre el foso; si es la escalera de caracol, un espadachin subiendola). NADA generico ('castillo de noche', 'castillo en llamas') ni palabras sueltas: escena de cine con accion + lugar + epoca, EN INGLES.
 """
 

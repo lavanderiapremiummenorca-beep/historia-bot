@@ -492,7 +492,9 @@ def _falai_image(prompt, dst, idx=0):
         neg = os.environ.get("FAL_IMG_NEG",
             "deformed, distorted faces, extra limbs, extra fingers, mutated hands, "
             "bad anatomy, disfigured, ugly, low quality, blurry, crowd of faces, "
-            "cartoon, 3d render, cgi, plastic, watermark, text")
+            "cartoon, 3d render, cgi, plastic, watermark, text, "
+            "gore, blood, bloody, wound, injury, graphic violence, torture, corpse, "
+            "dead body, mutilation, nudity, naked, nsfw, disturbing, scary horror")
         body = json.dumps({"prompt": full, "num_images": 1,
                            "image_size": {"width": w, "height": h},
                            "negative_prompt": neg,
