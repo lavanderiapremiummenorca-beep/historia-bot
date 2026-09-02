@@ -487,8 +487,8 @@ def _falai_image(prompt, dst, idx=0):
         "photorealistic with natural imperfections")
     full = f"{prompt}. {look}, {grade}. no text, no captions, no watermark"
     try:
-        w = int(os.environ.get("FAL_IMG_W", "896"))
-        h = int(os.environ.get("FAL_IMG_H", "1568"))
+        w = int(os.environ.get("FAL_IMG_W", "1024"))
+        h = int(os.environ.get("FAL_IMG_H", "1792"))
         neg = os.environ.get("FAL_IMG_NEG",
             "deformed, distorted faces, extra limbs, extra fingers, mutated hands, "
             "bad anatomy, disfigured, ugly, low quality, blurry, crowd of faces, "
@@ -617,16 +617,19 @@ def _kenburns_clip(img, dur, out, idx=0):
     d=1 (un frame de salida por frame de entrada) + input a 30fps -> el clip dura
     EXACTAMENTE 'dur'. (Con d=frames se disparaba a 40s+ y solo salia la 1a imagen.)"""
     F = max(1, int(round(dur * 30)))
-    # Zoom mas marcado (se nota el movimiento) + paneo que cruza la imagen.
-    # El paneo usa (iw-iw/zoom) como recorrido => NUNCA se sale (sin bordes negros).
+    step = 0.12 / F            # zoom total ~12% a lo largo del clip (lento y constante)
+    # Zoom+paneo suave. El paneo usa (iw-iw/zoom) => NUNCA se sale (sin bordes negros).
+    # TRUCO clave para que el movimiento sea ULTRA fino: el zoompan se renderiza al
+    # DOBLE de resolucion (entrada 2160x3840) y se baja a 1080x1920; ese "supersampling"
+    # elimina el tembleque/escalones tipicos del zoompan y deja el zoom sedoso.
     if idx % 2 == 0:
-        z = "min(1.07+0.0032*on,1.40)"
+        z = f"min(1.04+{step:.6f}*on,1.18)"
         px = f"(iw-iw/zoom)*on/{F}"          # izquierda -> derecha
     else:
-        z = "max(1.40-0.0032*on,1.07)"
+        z = f"max(1.18-{step:.6f}*on,1.04)"
         px = f"(iw-iw/zoom)*(1-on/{F})"      # derecha -> izquierda
     py = "(ih-ih/zoom)/2"
-    vf = ("scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,"
+    vf = ("scale=2160:3840:force_original_aspect_ratio=increase,crop=2160:3840,"
           f"zoompan=z='{z}':d=1:s=1080x1920:fps=30:x='{px}':y='{py}',"
           "eq=brightness=-0.02:contrast=1.05:saturation=1.06,setsar=1")
     run(["ffmpeg", "-y", "-loglevel", "error", "-loop", "1", "-framerate", "30",
@@ -640,7 +643,8 @@ def _build_photo_bg(script, total, workdir, spans):
     if not queries:
         return None
     nlines = len(spans)
-    n = max(1, min(len(queries), int(round(total / 3.5)) or 1, nlines))
+    # UNA imagen por linea (cambia con cada cambio de tema de la voz), hasta las que haya
+    n = max(1, min(len(queries), nlines))
     groups = _groups(nlines, n)
     n = len(groups)
     imgs = _photo_sources(queries[:n], workdir)

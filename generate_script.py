@@ -221,7 +221,7 @@ def _validate(s, tema="", cta="", broll_en=""):
     bl = s.get("broll_list")
     if not isinstance(bl, list) or not bl:
         bl = [broll_en] if broll_en else []
-    bl = [b.strip() for b in bl if isinstance(b, str) and b.strip()][:6]
+    bl = [b.strip() for b in bl if isinstance(b, str) and b.strip()][:12]
     if bl:
         s["broll_list"] = bl
         s["broll"] = bl[0]
@@ -243,7 +243,7 @@ Devuelve UNICAMENTE un JSON valido (sin texto alrededor) con esta forma exacta:
   "hashtags": ["Shorts", "historia", "curiosidades", "sabiasque", "datoscuriosos"],
   "bg": "uno de: orange, red, purple, teal",
   "broll": "{broll_en}",
-  "broll_list": ["una ESCENA para RECREAR con IA por CADA dato, EN INGLES, concreta, con ACCION y lugar y epoca (ej: 'roman gladiators fighting in the colosseum arena, roaring crowd', 'julius caesar assassinated in the roman senate', 'a roman legion marching through a burning city at dusk'). En orden. Devuelve SIEMPRE EXACTAMENTE 4 escenas distintas (una por dato/momento). Describe una imagen VIVA, como un plano de cine."],
+  "broll_list": ["una ESCENA para RECREAR con IA por CADA dato, EN INGLES, concreta, con ACCION y lugar y epoca (ej: 'roman gladiators fighting in the colosseum arena, roaring crowd', 'julius caesar assassinated in the roman senate', 'a roman legion marching through a burning city at dusk'). En el MISMO orden que 'lines'. Devuelve UNA escena por CADA linea de 'lines' (mismo numero de escenas que de lineas), y cada escena debe mostrar EXACTAMENTE lo que se narra en esa linea. Describe una imagen VIVA, como un plano de cine."],
   "ai_disclosure": false,
   "lines": [
     {{"voice": "frase que se narra (numeros en palabras)", "cap": "subtitulo corto en pantalla (2-4 palabras)"}}
