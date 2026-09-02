@@ -234,7 +234,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Main,{FONT},82,&H000AB6FF,&H000AB6FF,&H00101010,&H64000000,-1,0,0,0,100,100,2,0,1,3,3,2,150,150,470,1
+Style: Main,{FONT},104,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,1,0,1,8,4,2,120,120,540,1
 Style: Brand,{FONT},42,&H50FFFFFF,&H50FFFFFF,&H90000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,0,8,40,40,80,1
 
 [Events]
@@ -442,7 +442,7 @@ def _wiki_photo(query, dst):
                 with urllib.request.urlopen(rq, timeout=25) as rr, open(dst, "wb") as f:
                     f.write(rr.read())
                 if os.path.getsize(dst) > 8000:
-                    return True
+                    return u
     except Exception as e:
         sys.stderr.write(f"[foto] wiki fallo ({e})\n")
     return False
@@ -466,7 +466,7 @@ def _pexels_photo(query, dst):
                 with urllib.request.urlopen(rq, timeout=25) as rr, open(dst, "wb") as f:
                     f.write(rr.read())
                 if os.path.getsize(dst) > 8000:
-                    return True
+                    return u
     except Exception as e:
         sys.stderr.write(f"[foto] pexels fallo ({e})\n")
     return False
@@ -524,21 +524,88 @@ def _falai_image(prompt, dst, idx=0):
             f.write(r.read())
         if os.path.getsize(dst) > 8000:
             print(f"[img] imagen IA para: {prompt[:44]}")
-            return True
+            return url          # devuelve la URL publica (para imagen->video)
         return False
     except Exception as e:
         sys.stderr.write(f"[img] fal.ai imagen fallo ({e})\n")
         return False
 
 def _photo_sources(queries, workdir):
-    """Una imagen por escena. Prioridad: IA (fal.ai, premium y barato) ->
-    Wikimedia (archivo real) -> Pexels (stock)."""
+    """Una imagen por escena. Prioridad: IA (fal.ai) -> Wikimedia -> Pexels.
+    Devuelve lista de (ruta_local, url_publica_o_None). La URL sirve para
+    animar la imagen (imagen->video) sin volver a subirla."""
     out = []
     for i, q in enumerate(queries):
         dst = os.path.join(workdir, f"img_{i}.jpg")
-        if _falai_image(q, dst, i) or _wiki_photo(q, dst) or _pexels_photo(q, dst):
-            out.append(dst)
+        u = _falai_image(q, dst, i) or _wiki_photo(q, dst) or _pexels_photo(q, dst)
+        if u:
+            out.append((dst, u if isinstance(u, str) else None))
     return out
+
+def _norm_to_vertical(src, dur, out):
+    """Normaliza cualquier clip a 1080x1920 30fps con la duracion pedida
+    (repite en bucle si el clip es mas corto)."""
+    vf = ("scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,"
+          "fps=30,setsar=1")
+    run(["ffmpeg", "-y", "-loglevel", "error", "-stream_loop", "-1",
+         "-t", f"{dur:.2f}", "-i", src, "-vf", vf, "-an", "-c:v", "libx264",
+         "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p", "-r", "30", out])
+
+def _falai_img2video(image_url, prompt, workdir, idx=0):
+    """Anima una IMAGEN ya generada (imagen->video) con un modelo BARATO de fal.ai.
+    Mucho mas barato que texto->video. Modelo configurable con FAL_I2V_MODEL.
+    Devuelve la ruta del mp4 crudo o None (si falla, el motor usa Ken Burns)."""
+    key = os.environ.get("FAL_KEY", "").strip()
+    if not key or not image_url:
+        return None
+    import time
+    model = os.environ.get("FAL_I2V_MODEL", "fal-ai/kling-video/v1.6/standard/image-to-video")
+    dur = os.environ.get("FAL_I2V_DURATION", "5")
+    motion = os.environ.get("FAL_I2V_PROMPT",
+        "subtle cinematic camera movement, slow push-in, gentle parallax, "
+        "natural motion, film look")
+    full = (prompt + ". " + motion) if prompt else motion
+    payload = {"image_url": image_url, "prompt": full, "duration": str(dur)}
+    try:
+        req = urllib.request.Request("https://queue.fal.run/" + model,
+              data=json.dumps(payload).encode(),
+              headers={"Authorization": "Key " + key, "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            sub = json.loads(r.read().decode())
+        status_url = sub.get("status_url"); response_url = sub.get("response_url")
+        if not status_url or not response_url:
+            sys.stderr.write("[i2v] sin status_url; uso zoom.\n"); return None
+        for _ in range(80):                      # hasta ~6-7 min
+            rq = urllib.request.Request(status_url, headers={"Authorization": "Key " + key})
+            with urllib.request.urlopen(rq, timeout=30) as r:
+                st = json.loads(r.read().decode())
+            sname = st.get("status")
+            if sname == "COMPLETED":
+                break
+            if sname in ("FAILED", "ERROR", "CANCELED"):
+                sys.stderr.write(f"[i2v] estado {sname} ({model}); uso zoom.\n"); return None
+            time.sleep(5)
+        else:
+            sys.stderr.write("[i2v] tardo demasiado; uso zoom.\n"); return None
+        rq = urllib.request.Request(response_url, headers={"Authorization": "Key " + key})
+        with urllib.request.urlopen(rq, timeout=60) as r:
+            res = json.loads(r.read().decode())
+        vid = ((res.get("video") or {}).get("url")
+               or (res.get("output") or {}).get("url")
+               or (res.get("videos", [{}])[0].get("url") if res.get("videos") else None))
+        if not vid:
+            sys.stderr.write(f"[i2v] respuesta sin video ({model}); uso zoom.\n"); return None
+        dst = os.path.join(workdir, f"i2v_{idx}.mp4")
+        rq2 = urllib.request.Request(vid, headers={"User-Agent": "canal-bot/1.0"})
+        with urllib.request.urlopen(rq2, timeout=180) as r, open(dst, "wb") as f:
+            f.write(r.read())
+        if _valid_video(dst, 0.3):
+            print(f"[i2v] imagen->video OK ({model}) idx {idx}")
+            return dst
+        return None
+    except Exception as e:
+        sys.stderr.write(f"[i2v] fallo ({e}); uso zoom.\n")
+        return None
 
 def _kenburns_clip(img, dur, out, idx=0):
     """Imagen fija -> clip 1080x1920 con movimiento Ken Burns (zoom lento).
@@ -574,16 +641,26 @@ def _build_photo_bg(script, total, workdir, spans):
     imgs = _photo_sources(queries[:n], workdir)
     if not imgs:
         return None
+    aivideo = os.environ.get("VISUAL_MODE", "video").strip().lower() == "aivideo"
     segs = []
     for k, g in enumerate(groups):
         if k >= len(imgs):
             break
+        img_path, img_url = imgs[k]
         start = spans[g[0]][0]
         end = total if k == len(groups) - 1 else spans[groups[k + 1][0]][0]
         dur = max(0.9, end - start)
         out = os.path.join(workdir, f"ph_{k}.mp4")
         try:
-            _kenburns_clip(imgs[k], dur + 0.1, out, k)
+            done = False
+            if aivideo and img_url:            # imagen->video (movimiento real, barato)
+                prompt_k = queries[k] if k < len(queries) else ""
+                raw = _falai_img2video(img_url, prompt_k, workdir, k)
+                if raw:
+                    _norm_to_vertical(raw, dur + 0.1, out)
+                    done = _valid_video(out, 0.3)
+            if not done:                        # plan B: zoom/paneo sobre la imagen
+                _kenburns_clip(img_path, dur + 0.1, out, k)
             if _valid_video(out, 0.3):
                 segs.append(out)
         except Exception as e:
@@ -613,7 +690,7 @@ def _build_photo_bg(script, total, workdir, spans):
 def build_background(script, total, workdir, spans):
     """Fondo dinámico: un clip por IDEA, con push-in. Usa metraje IA (Kling) para los
     primeros AI_CLIPS 'hero' si hay FAL_KEY, y stock para el resto. None si no hay clips."""
-    if os.environ.get("VISUAL_MODE", "video").strip().lower() == "photos":
+    if os.environ.get("VISUAL_MODE", "video").strip().lower() in ("photos", "aivideo"):
         pb = _build_photo_bg(script, total, workdir, spans)
         if pb:
             return pb
