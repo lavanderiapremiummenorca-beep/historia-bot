@@ -24,11 +24,7 @@ jobs:
           ELEVEN_VOICE_ID: "y6WtESLj18d0diFRruBs"
           ELEVEN_MODEL: eleven_flash_v2_5
           FAL_KEY: ${{ secrets.FAL_KEY }}
-          FAL_I2V_MODEL: "fal-ai/kling-video/v2.5-turbo/pro/image-to-video"
-          FAL_I2V_DURATION: "10"
-          FAL_I2V_PROMPT: "cinematic, natural realistic movement, smooth dynamic camera, subjects moving and gesturing naturally, dramatic lighting, film look, high detail"
           VISUAL_MODE: photos
-          AI_CLIPS: "4"
           EDGE_VOICE: es-ES-AlvaroNeural
           EDGE_RATE: "+0%"
           CHANNEL_HANDLE: ${{ secrets.CHANNEL_HANDLE }}
@@ -39,5 +35,21 @@ jobs:
       - name: Subir a YouTube
         env:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
-          YT_CLIENT_SECRET: ${{
-        
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          YT_PRIVACY: public
+          YT_CATEGORY: "27"
+        run: python upload.py
+      - name: Guardar copia en Google Drive (para Repurpose -> TikTok + Instagram)
+        env:
+          GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          GDRIVE_REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+        run: python upload_drive.py
+      - name: Guardar el video como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-del-dia
+          path: output/*.mp4
+          retention-days: 7
