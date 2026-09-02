@@ -27,7 +27,7 @@ jobs:
           FAL_I2V_MODEL: "fal-ai/kling-video/v2.5-turbo/pro/image-to-video"
           FAL_I2V_DURATION: "10"
           FAL_I2V_PROMPT: "cinematic, natural realistic movement, smooth dynamic camera, subjects moving and gesturing naturally, dramatic lighting, film look, high detail"
-          VISUAL_MODE: aivideo
+          VISUAL_MODE: photos
           AI_CLIPS: "4"
           EDGE_VOICE: es-ES-AlvaroNeural
           EDGE_RATE: "+0%"
