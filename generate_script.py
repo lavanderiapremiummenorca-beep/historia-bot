@@ -64,21 +64,19 @@ FORMATOS = [
 ]
 
 GANCHOS = [
-    "El noventa por ciento de la gente no sabe esto.",
-    "Esto que hacian te va a dejar sin palabras.",
-    "Prepara la cabeza, porque esto es real.",
-    "Nadie te conto esto en el colegio.",
-    "El ultimo dato te va a explotar la cabeza.",
-    "Esto de verdad paso, aunque no lo parezca.",
-    "Agarrate, que esto es historia real.",
+    "suelta de golpe el dato mas asqueroso, raro o brutal del tema, en presente y concreto, y remata con un bucle tipo 'y no es ni lo peor'",
+    "abre con una imagen concreta y chocante (alguien haciendo algo increible) como si lo estuvieras viendo ahora mismo",
+    "abre con una pregunta que cree un vacio de curiosidad imposible de ignorar sobre el tema",
+    "empieza desmontando algo que casi todos creen ('lo que te contaron sobre esto es mentira') y promete la verdad",
+    "abre con una cifra o una comparacion demoledora con el mundo de hoy",
 ]
 
 CTAS = [
-    "Cual te ha sorprendido mas? Dimelo en los comentarios.",
-    "Sabias alguno? Comenta el numero.",
-    "Cual no te esperabas? Te leo abajo.",
-    "Comenta si quieres la parte dos.",
-    "Guarda esto para no olvidarlo y sigue para mas historia.",
+    "Cual de estos te ha revuelto mas? Te leo abajo.",
+    "Cual no te esperabas? Comenta el numero.",
+    "Vivirias en esa epoca? Dimelo en comentarios.",
+    "Cuentame cual te ha dejado peor cuerpo.",
+    "Sigueme, que manana va otro que flipas.",
 ]
 
 POWER = ("alucinante", "increible", "no creeras", "no vas a creer", "brutal",
@@ -254,13 +252,15 @@ Devuelve UNICAMENTE un JSON valido (sin texto alrededor) con esta forma exacta:
 GUION DE HOY (canal de HISTORIA, formato viral, DISTINTO a cualquier dia anterior):
 - TEMA DE HOY (obligatorio, no elijas otro): {tema}.
 - FORMATO DE HOY: {formato}
-- LINEA 1 = GANCHO POTENTE (primeros 2 segundos). Empieza con algo tipo: "{gancho}" y promete el premio sin darlo aun.
-- Luego los datos, uno por linea o dos, CADA UNO sorprendente, concreto y VERAZ (nada inventado; historia real). Del mas flojo al mas fuerte.
+- LINEA 1 = GANCHO (primer segundo). Tecnica de hoy: {gancho}. PROHIBIDO usar frases-comodin genericas ("el noventa por ciento no sabe esto", "prepara la cabeza", "esto te va a explotar la mente", "agarrate"): NO enganchan, suenan a bot. El gancho debe ser CONCRETO, especifico y visceral, sacado del dato MAS fuerte del tema de hoy, y ABRIR UN BUCLE (promete algo aun mas fuerte que todavia no cuentas). Nada de empezar con "En [tema]...".
+- Luego los datos, CADA UNO sorprendente, concreto y VERAZ (historia real, nada inventado). Del mas flojo al mas fuerte, el mejor al final.
+- Encadena con TENSION ("pero lo siguiente es peor", "y aun hay mas"), NO con "primero, segundo, tercero" a secas.
+- Gramatica IMPECABLE de espanol de Espana (cuidado con articulos y concordancia: "la entrada", "el brazo de la espada"). Frases cortas y en presente.
 - ULTIMA LINEA = CEBO DE COMENTARIOS: algo tipo "{cta}".
 - Entre 5 y 8 lineas en total. Frases cortas y con energia (ritmo rapido de Short, 30-45 s).
 - Tono: divulgacion cercana, con chispa, que engancha. Espanol de Espana. NO academico ni aburrido.
 - 'cap' sin emojis. 'voice' escribe los numeros con letras.
-- IMPORTANTE: cada 'broll_list' describe una ESCENA cinematografica a RECREAR con IA (accion + lugar + epoca), como un plano de una pelicula historica. Nada de palabras sueltas.
+- CRITICO: cada escena de 'broll_list' debe MOSTRAR EXACTAMENTE el dato que se narra en esa parte, EN EL MISMO ORDEN (si el dato es la letrina, dibuja la letrina medieval sobre el foso; si es la escalera de caracol, un espadachin subiendola). NADA generico ('castillo de noche', 'castillo en llamas') ni palabras sueltas: escena de cine con accion + lugar + epoca, EN INGLES.
 """
 
 
