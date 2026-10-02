@@ -20,6 +20,31 @@ if not os.path.isdir(MUSIC) and os.path.isdir(os.path.join(BASE, "musica")):
 os.makedirs(OUTPUT, exist_ok=True)
 
 TTS_ENGINE = os.environ.get("TTS_ENGINE", "espeak")
+
+# ---------- Control de CALIDAD: no publicar si el video no sale perfecto ----------
+# Si STRICT_QUALITY esta activo (por defecto SI), cuando el video del dia no sale
+# bien -sin imagenes reales (pantalla lisa de color), o con la voz de reserva
+# gratis en vez de ElevenLabs- este script FALLA a proposito. En GitHub Actions,
+# al fallar este paso, el trabajo se para y NO se sube nada a YouTube ni a redes.
+# Mejor un dia sin video que un video malo publicado.
+# Para permitir videos con fallos en un canal, pon  STRICT_QUALITY: "0"  en su daily.yml.
+STRICT_QUALITY = os.environ.get("STRICT_QUALITY", "1").strip().lower() not in (
+    "0", "false", "no", "off", "")
+_CALIDAD_PROBLEMAS = []
+
+def _calidad_flag(motivo):
+    _CALIDAD_PROBLEMAS.append(motivo)
+    sys.stderr.write("[calidad] PROBLEMA: " + motivo + "\n")
+
+def _calidad_check(fase=""):
+    if STRICT_QUALITY and _CALIDAD_PROBLEMAS:
+        msg = ("[calidad] NO se publica el video de hoy porque no salio perfecto:\n  - "
+               + "\n  - ".join(_CALIDAD_PROBLEMAS)
+               + "\n[calidad] (Para permitir videos con fallos en este canal, pon "
+                 'STRICT_QUALITY: "0" en su daily.yml.)')
+        sys.stderr.write(msg + "\n")
+        print(msg)
+        raise SystemExit(1)
 EDGE_VOICE = os.environ.get("EDGE_VOICE", "es-ES-AlvaroNeural")
 GAP = 0.07          # (ya no se usa; voz continua)
 FONT = "DejaVu Sans"
@@ -155,14 +180,19 @@ def synth_full(text, out_wav):
     """Locucion completa de una vez + tiempos de palabra. Usa ElevenLabs si
     esta configurado (TTS_ENGINE=eleven y hay API key) y CAE a edge-tts si algo
     falla, para no perder nunca el video del dia."""
-    if TTS_ENGINE == "eleven" and os.environ.get("ELEVENLABS_API_KEY"):
-        try:
-            w = synth_eleven_full(text, out_wav)
-            sys.stderr.write("[tts] voz: ElevenLabs (" +
-                             os.environ.get("ELEVEN_MODEL", "eleven_flash_v2_5") + ")\n")
-            return w
-        except Exception as e:
-            sys.stderr.write("[tts] ElevenLabs fallo (%s); uso edge-tts.\n" % e)
+    if TTS_ENGINE == "eleven":
+        if not os.environ.get("ELEVENLABS_API_KEY"):
+            _calidad_flag("falta la clave ELEVENLABS_API_KEY: la voz saldria con la de "
+                          "reserva (gratis), no con ElevenLabs")
+        else:
+            try:
+                w = synth_eleven_full(text, out_wav)
+                sys.stderr.write("[tts] voz: ElevenLabs (" +
+                                 os.environ.get("ELEVEN_MODEL", "eleven_flash_v2_5") + ")\n")
+                return w
+            except Exception as e:
+                _calidad_flag("la voz de ElevenLabs fallo (%s): se usaria la voz de "
+                              "reserva (gratis)" % e)
     return synth_edge_full(text, out_wav)
 
 def synth(text, out_wav):
@@ -719,7 +749,9 @@ def build_background(script, total, workdir, spans):
         pb = _build_photo_bg(script, total, workdir, spans)
         if pb:
             return pb
-        # si el modo fotos no consigue imagenes, cae al modo video normal
+        # En modo FOTOS NO caemos a stock: si no hay imagenes de IA, devolvemos None
+        # para que salte el freno de calidad y NO se publique un video con fondo generico.
+        return None
     srcs = []
     blist = script.get("broll_list")
     try:
@@ -850,6 +882,7 @@ def _audio_perline(lines, workdir):
 def build_video(script, out_path, workdir):
     lines = script["lines"]
     full_wav, spans, total, word_times = build_audio(lines, workdir)
+    _calidad_check("audio")  # aborta si la voz cayo a la de reserva
 
     # Subtítulos VERBATIM y SINCRONIZADOS AL 100%: cada palabra aparece justo
     # cuando se pronuncia, usando los tiempos reales de la voz (edge-tts).
@@ -881,6 +914,9 @@ def build_video(script, out_path, workdir):
 
     # Fondo dinámico (varios vídeos) o degradado de reserva
     bgv = build_background(script, total, workdir, spans)
+    if not bgv and os.environ.get("VISUAL_MODE", "video").strip().lower() in ("photos", "aivideo"):
+        _calidad_flag("no se consiguieron imagenes: el fondo iba a ser una pantalla lisa de color")
+    _calidad_check("fondo")  # aborta si no hay imagenes reales
     grad = os.path.join(ASSETS, f"bg_{script.get('bg','blue')}.jpg")
     if not os.path.exists(grad):
         grad = os.path.join(ASSETS, "bg_blue.jpg")

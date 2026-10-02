@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Cerebro del canal HISTORIA (formato viral basado en datos reales de lo que
-mas visitas consigue en Shorts de historia/curiosidades):
-  - Titulo con NUMERO + palabra potente ("3 datos alucinantes", "que no creeras").
-  - Gancho fuerte en la primera linea (primeros 2 segundos).
-  - Lista de 3-4 datos historicos impactantes.
-  - Cebo de comentarios al final (dispara el algoritmo).
-Cada dia se ASIGNA un tema/epoca y un formato distinto (rotacion determinista),
-para que nunca se repita. Devuelve el mismo dict que usa generate.py.
+Cerebro del canal HISTORIA (Capsulas de Historia).
+Gemini ELIGE el tema libre cada dia (dentro del canal). Para que no se repita ni
+derive, se le pasa una PISTA rotatoria distinta cada dia (un area/epoca), ademas
+de formato, gancho y cierre (todo por rotacion determinista).
+Devuelve el mismo dict que usa generate.py.
 """
 import os, sys, json, datetime, urllib.request
 
@@ -17,44 +14,48 @@ _MODEL_CANDIDATES = [
     "gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash",
     "gemini-2.5-flash-lite", "gemini-2.0-flash-001", "gemini-1.5-flash",
 ]
-BGS = ["blue", "green", "orange", "purple", "teal", "red"]
 
-# Temas/epocas concretas y con imagen potente (rotan por dia). El 2o valor es
-# una pista EN INGLES para buscar imagenes reales de archivo.
-TEMAS = [
-    ("el Antiguo Egipto y los faraones", "ancient egypt pharaoh"),
-    ("la Antigua Roma y los gladiadores", "ancient rome gladiator colosseum"),
-    ("la Antigua Grecia", "ancient greece parthenon"),
-    ("la Segunda Guerra Mundial", "world war 2 historical photo"),
-    ("la Edad Media", "medieval knight castle"),
-    ("los vikingos", "viking warrior ship"),
-    ("el Antiguo Japon y los samurais", "samurai ancient japan"),
-    ("la Peste Negra", "black death plague medieval"),
-    ("el Imperio Azteca", "aztec empire temple"),
-    ("los mayas", "maya civilization pyramid"),
-    ("el Imperio Mongol y Gengis Kan", "mongol empire genghis khan"),
-    ("la Revolucion Francesa", "french revolution painting"),
-    ("el hundimiento del Titanic", "titanic ship 1912"),
-    ("la Guerra Fria", "cold war 1960s"),
-    ("el Salvaje Oeste americano", "wild west cowboy 1800s"),
-    ("los piratas", "pirate ship golden age"),
-    ("la Inquisicion", "inquisition medieval"),
-    ("las momias y el mas alla", "egyptian mummy tomb"),
-    ("los castigos y ejecuciones antiguas", "medieval punishment history"),
-    ("la medicina antigua", "ancient medicine history"),
-    ("los grandes inventos de la historia", "historic invention old"),
-    ("las batallas mas legendarias", "historic battle painting"),
-    ("reyes y reinas polemicos", "royal king queen portrait history"),
-    ("la carrera espacial", "space race 1969 apollo"),
-    ("las civilizaciones perdidas", "lost ancient civilization ruins"),
-    ("los faraones y sus tesoros", "tutankhamun treasure gold"),
-    ("la comida a lo largo de la historia", "historic food banquet painting"),
-    ("los castillos y fortalezas", "medieval castle fortress"),
-    ("Napoleon y su imperio", "napoleon bonaparte painting"),
-    ("el Imperio Romano en su caida", "fall of rome ruins"),
+CANAL_NOMBRE = "HISTORIA"
+HASHTAGS_BASE = ("historia", "curiosidades", "sabiasque", "datoscuriosos")
+TEMA_GENERICO = "la historia"
+TITULO_FALLBACK = "3 datos de {base} que no vas a creer"
+BG_DEFAULT = "orange"
+BROLL_FALLBACK = "ancient stone ruins at golden hour, dramatic sky, cinematic, film grain"
+BROLL_EJEMPLOS = ("ej: 'roman gladiators fighting in the colosseum arena, roaring crowd', "
+                  "'julius caesar in the roman senate, torchlight', "
+                  "'a roman legion marching through a burning city at dusk'")
+TONO = ("divulgacion cercana, con chispa y ritmo, un punto de asombro. Espanol de Espana. "
+        "Historia REAL, nunca inventes datos. Frases cortas y en presente. NO academico ni aburrido.")
+REGLA_EXTRA = ("- Todo VERAZ: historia real, nada inventado.\n"
+               "- Escenas SEGURAS para YouTube: dramaticas y con fuerza, pero SIN sangre, visceras, "
+               "heridas, torturas explicitas, cadaveres ni desnudos. Sugiere el horror con atmosfera "
+               "(sombras, gestos, reacciones), NO de forma explicita.\n"
+               "- Personajes historicos como escena de epoca; nunca la cara de una persona real actual.")
+MASTER_FALLBACK = "Eres un divulgador de historia experto en Shorts virales en espanol de Espana."
+
+# PISTAS: areas/epocas AMPLIAS (no temas cerrados). Cada dia rota una para
+# empujar variedad; Gemini elige el tema y el angulo exactos dentro de esa zona.
+PISTAS = [
+    ("las civilizaciones antiguas (Egipto, Roma, Grecia)", "ancient egypt pharaoh temple, cinematic"),
+    ("imperios y su caida", "fall of an ancient empire, ruins and smoke at dusk"),
+    ("la Edad Media, los castillos y los caballeros", "medieval knight before a stone castle at dawn"),
+    ("guerras y grandes batallas de la historia", "historic battle formation on a misty field, banners"),
+    ("vikingos, samurais y guerreros legendarios", "viking warriors on a longship at grey dawn"),
+    ("exploradores, piratas y descubrimientos", "pirate ship on rough seas, golden age, dramatic light"),
+    ("inventos y ciencia a lo largo de la historia", "old workshop with an early invention, candlelight"),
+    ("misterios y civilizaciones perdidas", "lost ancient ruins swallowed by jungle, mist"),
+    ("reyes, reinas y personajes poderosos", "royal throne room, portrait style, dramatic shadow"),
+    ("la vida cotidiana del pasado (comida, higiene, costumbres)", "medieval market street, everyday life, warm light"),
+    ("castigos, leyes y justicia antigua", "medieval stone dungeon, shadows, single torch"),
+    ("plagas, medicina y supervivencia", "plague doctor silhouette in a foggy medieval street"),
+    ("el siglo XX: guerras mundiales y guerra fria", "1940s historical photo style, city under grey sky"),
+    ("la carrera espacial y grandes hitos", "1969 apollo rocket launch, vintage film look"),
+    ("el Salvaje Oeste y otras fronteras", "wild west dusty town street at high noon, 1800s"),
+    ("religiones, mitos y creencias antiguas", "ancient temple interior with statues, shafts of light"),
+    ("catastrofes historicas (Titanic, Pompeya, incendios)", "titanic ship at sea, 1912, cold dramatic light"),
+    ("revoluciones que cambiaron el mundo", "french revolution crowd with torches, painting style"),
 ]
 
-# Formatos ganadores (rotan). Cada uno define como se estructura el guion.
 FORMATOS = [
     "LISTA DE 3: tres datos historicos alucinantes y poco conocidos sobre el tema, del mas normal al mas fuerte.",
     "LISTA DE 4: cuatro datos rapidos y sorprendentes sobre el tema, ritmo agil.",
@@ -72,16 +73,18 @@ GANCHOS = [
 ]
 
 CTAS = [
-    "Cual de estos te ha revuelto mas? Te leo abajo.",
-    "Cual no te esperabas? Comenta el numero.",
-    "Vivirias en esa epoca? Dimelo en comentarios.",
-    "Cuentame cual te ha dejado peor cuerpo.",
-    "Sigueme, que manana va otro que flipas.",
+    "¿Cuál de estos te ha revuelto más? Te leo abajo.",
+    "¿Cuál no te esperabas? Comenta el número.",
+    "¿Vivirías en esa época? Dímelo en comentarios.",
+    "Cuéntame cuál te ha dejado peor cuerpo.",
+    "Sígueme, que mañana va otro que flipas.",
 ]
 
 POWER = ("alucinante", "increible", "no creeras", "no vas a creer", "brutal",
          "impactante", "jamas", "nadie sabe", "prohibid", "oscuro", "escalofriante",
          "que cambio la historia", "que no te ensenaron", "sorprendente")
+
+BGS = ["blue", "green", "orange", "purple", "teal", "red"]
 
 
 def _run_seed():
@@ -181,28 +184,60 @@ def _gen_json(prompt, key):
     return None
 
 
+# Red de seguridad: si el modelo escribe sin enes ni tildes, se restauran las
+# palabras mas comunes (el subtitulo salia como "MANANA" en vez de "MANANA" con ene).
+_ORTO = {
+    "manana": "mañana", "ano": "año", "anos": "años", "nino": "niño", "ninos": "niños",
+    "nina": "niña", "ninas": "niñas", "senor": "señor", "senora": "señora",
+    "espanol": "español", "espanola": "española", "Espana": "España", "espana": "España",
+    "pequeno": "pequeño", "pequena": "pequeña", "sueno": "sueño", "suenos": "sueños",
+    "bano": "baño", "banos": "baños", "compania": "compañía", "montana": "montaña",
+    "manana,": "mañana,", "ensenar": "enseñar", "ensena": "enseña", "diseno": "diseño",
+    "extrano": "extraño", "dano": "daño", "danos": "daños", "puno": "puño",
+    "canon": "cañón", "otono": "otoño", "sueno.": "sueño.", "duena": "dueña",
+    "dueno": "dueño", "acompanar": "acompañar", "manana.": "mañana.",
+}
+
+def _fix_orto(txt):
+    if not isinstance(txt, str) or not txt:
+        return txt
+    out = []
+    for w in txt.split(" "):
+        low = w.lower()
+        rep = _ORTO.get(low) or _ORTO.get(w)
+        if rep:
+            if w[:1].isupper():
+                rep = rep[:1].upper() + rep[1:]
+            out.append(rep)
+        else:
+            out.append(w)
+    return " ".join(out)
+
+
 def _validate(s, tema="", cta="", broll_en=""):
     assert isinstance(s.get("lines"), list) and 4 <= len(s["lines"]) <= 12, "lineas fuera de rango"
     for ln in s["lines"]:
         assert ln.get("voice"), "linea sin voz"
         ln.setdefault("cap", "")
-    s.setdefault("bg", "orange")
+        ln["voice"] = _fix_orto(ln["voice"])
+        ln["cap"] = _fix_orto(ln["cap"])
+    s.setdefault("bg", BG_DEFAULT)
     if s["bg"] not in BGS:
-        s["bg"] = "orange"
+        s["bg"] = BG_DEFAULT
     hs = [h.lstrip("#") for h in s.get("hashtags", []) if h.strip()]
     if not hs or hs[0].lower() != "shorts":
         hs = ["Shorts"] + [h for h in hs if h.lower() != "shorts"]
-    s["hashtags"] = (hs + ["historia", "curiosidades", "sabiasque", "datoscuriosos"])[:6]
+    s["hashtags"] = (hs + list(HASHTAGS_BASE))[:6]
 
     # TITULO: obliga a que lleve un numero o una palabra potente
-    t = (s.get("title") or "").strip()
+    t = _fix_orto((s.get("title") or "").strip())
     low = t.lower()
     tiene_num = any(c.isdigit() for c in t) or any(w in low for w in
         ("tres", "cuatro", "cinco", "dos"))
     tiene_power = any(p in low for p in POWER)
-    if not t or not (tiene_num or tiene_power):
-        base = (tema or "la historia").strip()
-        t = f"3 datos de {base} que no vas a creer"
+    if not t:
+        base = (tema or TEMA_GENERICO).strip()
+        t = TITULO_FALLBACK.format(base=base)
     if "#short" not in low:
         t = t + " #shorts"
     s["title"] = t
@@ -210,12 +245,12 @@ def _validate(s, tema="", cta="", broll_en=""):
     # CTA obligatorio como ultima linea (cebo de comentarios)
     if cta:
         last = (s["lines"][-1].get("voice", "") or "").lower()
-        if "coment" not in last and "abajo" not in last and "sigue" not in last:
+        if "coment" not in last and "abajo" not in last and "sigue" not in last and "guarda" not in last:
             s["lines"].append({"voice": cta, "cap": "comenta abajo"})
 
     if not (s.get("description") or "").strip():
         s["description"] = (t.replace(" #shorts", "") + ". " + (cta or "")).strip()
-    s["description"] = s["description"].rstrip()
+    s["description"] = _fix_orto(s["description"]).rstrip()
 
     # BROLL como pista de imagen
     bl = s.get("broll_list")
@@ -238,35 +273,38 @@ def _validate(s, tema="", cta="", broll_en=""):
     return s
 
 
-def _schema(tema, broll_en, formato, gancho, cta):
+def _schema(broll_en, formato, gancho, cta, pista):
+    hs = '", "'.join(["Shorts"] + list(HASHTAGS_BASE))
     return f"""
 Devuelve UNICAMENTE un JSON valido (sin texto alrededor) con esta forma exacta:
 {{
-  "title": "titulo IMPACTANTE con un NUMERO y/o palabra potente (alucinante, no vas a creer, jamas, que no te ensenaron...). Sobre el tema de HOY. Max 80 caracteres, 1 emoji opcional, incluye #shorts.",
+  "title": "titulo IMPACTANTE con un NUMERO y/o una palabra potente. Sobre el tema de HOY. Max 80 caracteres, 1 emoji opcional, incluye #shorts.",
   "description": "1-2 frases con gancho + hashtags. Termina invitando a comentar.",
-  "hashtags": ["Shorts", "historia", "curiosidades", "sabiasque", "datoscuriosos"],
+  "hashtags": ["{hs}"],
   "bg": "uno de: orange, red, purple, teal",
   "broll": "{broll_en}",
-  "broll_list": ["una ESCENA para RECREAR con IA por CADA dato, EN INGLES, concreta, con ACCION y lugar y epoca (ej: 'roman gladiators fighting in the colosseum arena, roaring crowd', 'julius caesar assassinated in the roman senate', 'a roman legion marching through a burning city at dusk'). En el MISMO orden que 'lines'. Devuelve UNA escena por CADA linea de 'lines' (mismo numero de escenas que de lineas), y cada escena debe mostrar EXACTAMENTE lo que se narra en esa linea. Describe una imagen VIVA, como un plano de cine."],
+  "broll_list": ["una ESCENA para RECREAR con IA por CADA linea, EN INGLES, concreta, con ACCION, lugar y luz ({BROLL_EJEMPLOS}). En el MISMO orden que 'lines'. UNA escena por CADA linea (mismo numero de escenas que de lineas), y cada escena debe mostrar EXACTAMENTE lo que se narra en esa linea. Describe una imagen VIVA, como un plano de cine."],
   "ai_disclosure": false,
-  "video_idx": "indice 0-based de la ESCENA de broll_list que MAS ganaria con MOVIMIENTO de video real (la mas dinamica o impactante). Devuelve -1 si ninguna lo necesita de verdad. Elige como MUCHO una.",
+  "video_idx": "indice 0-based de la ESCENA de broll_list que MAS ganaria con MOVIMIENTO de video real (la mas dinamica). Devuelve -1 si ninguna lo necesita. Como MUCHO una.",
   "lines": [
     {{"voice": "frase que se narra (numeros en palabras)", "cap": "subtitulo corto en pantalla (2-4 palabras)"}}
   ]
 }}
-GUION DE HOY (canal de HISTORIA, formato viral, DISTINTO a cualquier dia anterior):
-- TEMA DE HOY (obligatorio, no elijas otro): {tema}.
+GUION DE HOY (canal de {CANAL_NOMBRE}, formato viral, DISTINTO a cualquier dia anterior):
+- ELIGE TU EL TEMA DE HOY: libre, dentro del canal de {CANAL_NOMBRE}. Concreto y con gancho. Que sea DISTINTO a lo mas tipico y a lo de dias anteriores; NO te repitas ni tires siempre por lo mismo.
+- PISTA PARA VARIAR HOY (orientate hacia esta zona para no caer siempre en lo mismo, pero TU decides el tema y el enfoque exactos, y puedes afinar dentro de ella): {pista}.
 - FORMATO DE HOY: {formato}
-- LINEA 1 = GANCHO (primer segundo). Tecnica de hoy: {gancho}. PROHIBIDO usar frases-comodin genericas ("el noventa por ciento no sabe esto", "prepara la cabeza", "esto te va a explotar la mente", "agarrate"): NO enganchan, suenan a bot. El gancho debe ser CONCRETO, especifico y visceral, sacado del dato MAS fuerte del tema de hoy, y ABRIR UN BUCLE (promete algo aun mas fuerte que todavia no cuentas). Nada de empezar con "En [tema]...".
-- Luego los datos, CADA UNO sorprendente, concreto y VERAZ (historia real, nada inventado). Del mas flojo al mas fuerte, el mejor al final.
-- Encadena con TENSION ("pero lo siguiente es peor", "y aun hay mas"), NO con "primero, segundo, tercero" a secas.
-- Gramatica IMPECABLE de espanol de Espana (cuidado con articulos y concordancia: "la entrada", "el brazo de la espada"). Frases cortas y en presente.
-- ULTIMA LINEA = CEBO DE COMENTARIOS: algo tipo "{cta}".
-- Entre 5 y 8 lineas en total. Frases cortas y con energia (ritmo rapido de Short, 30-45 s).
-- Tono: divulgacion cercana, con chispa, que engancha. Espanol de Espana. NO academico ni aburrido.
+- LINEA 1 = GANCHO (primer segundo). Tecnica de hoy: {gancho}. PROHIBIDO usar frases-comodin genericas ("el noventa por ciento no sabe esto", "prepara la cabeza", "esto te va a explotar la mente", "agarrate"): NO enganchan, suenan a bot. El gancho debe ser CONCRETO, especifico y util, sacado de lo MAS fuerte del tema de hoy, y ABRIR UN BUCLE (promete algo aun mejor que todavia no cuentas). Nada de empezar con "En [tema]...".
+- Luego el contenido, cada parte concreta y VERAZ (nada inventado). De menos a mas: lo mejor al final.
+- Encadena con TENSION ("pero lo siguiente es mejor", "y aun hay mas"), NO con "primero, segundo, tercero" a secas.
+- ORTOGRAFIA: espanol de Espana IMPECABLE, con TILDES y con la letra ENE (mañana, año, España, sueño, pequeño). NUNCA sustituyas la ñ por n. Cuidado con articulos y concordancia. Frases cortas y en presente.
+- ULTIMA LINEA = CIERRE que invita a participar: algo tipo "{cta}".
+- Entre 5 y 8 lineas en total. Frases cortas y con energia (ritmo de Short, 30-45 s).
+- Tono: {TONO}
 - 'cap' sin emojis. 'voice' escribe los numeros con letras.
-- SEGURIDAD (obligatorio): las escenas deben ser APTAS PARA YOUTUBE Y PUBLICIDAD. Dramaticas y con fuerza, pero SIN sangre, visceras, heridas, torturas explicitas, cadaveres ni desnudos. Sugiere el horror con atmosfera (sombras, gestos, reacciones), NO lo muestres de forma explicita.
-- CRITICO: cada escena de 'broll_list' debe MOSTRAR EXACTAMENTE el dato que se narra en esa parte, EN EL MISMO ORDEN (si el dato es la letrina, dibuja la letrina medieval sobre el foso; si es la escalera de caracol, un espadachin subiendola). NADA generico ('castillo de noche', 'castillo en llamas') ni palabras sueltas: escena de cine con accion + lugar + epoca, EN INGLES.
+- SEGURIDAD (obligatorio): las escenas deben ser APTAS PARA YOUTUBE Y PUBLICIDAD. Con fuerza, pero SIN sangre, heridas, cuerpos mutilados, desnudos ni violencia explicita. Nada de caras de personas reales famosas.
+{REGLA_EXTRA}
+- CRITICO: cada escena de 'broll_list' debe MOSTRAR EXACTAMENTE lo que se narra en esa parte, EN EL MISMO ORDEN. NADA generico ni palabras sueltas: escena de cine con accion + lugar + luz, EN INGLES.
 """
 
 
@@ -277,9 +315,10 @@ def generate():
     try:
         master = open(os.path.join(BASE, "PROMPT-MAESTRO.md"), encoding="utf-8").read()
     except Exception:
-        master = "Eres un divulgador de historia experto en Shorts virales en espanol de Espana."
+        master = MASTER_FALLBACK
 
-    tema, broll_en = _rot(TEMAS, 1)
+    pista, broll_en = _rot(PISTAS, 1)
+    tema = ""  # el tema lo ELIGE Gemini; 'pista' solo orienta para no repetir
     formato = _rot(FORMATOS, 3)
     gancho = _rot(GANCHOS, 5)
     cta = _rot(CTAS, 7)
@@ -287,9 +326,9 @@ def generate():
 
     prompt = (master
               + f"\n\n---\nTAREA DE HOY ({hoy}):\n"
-              + "Crea un Short de historia con el formato viral de abajo. Sigue EXACTAMENTE el tema, "
-                "el formato, el gancho y el cierre que se te asignan. Todo debe ser historia REAL.\n"
-              + _schema(tema, broll_en, formato, gancho, cta))
+              + f"Crea un Short de {CANAL_NOMBRE} con el formato viral de abajo. ELIGE tu el tema (libre, del canal, sin repetir), "
+                "y sigue EXACTAMENTE el formato, el gancho y el cierre que se te asignan. Todo debe ser VERAZ.\n"
+              + _schema(broll_en, formato, gancho, cta, pista))
     try:
         s = _gen_json(prompt, key)
         if not s:
