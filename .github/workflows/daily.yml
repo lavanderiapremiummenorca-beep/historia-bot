@@ -25,6 +25,9 @@ jobs:
           ELEVEN_MODEL: eleven_flash_v2_5
           FAL_KEY: ${{ secrets.FAL_KEY }}
           AI_HERO_CLIPS: "0"
+          FAL_IMG_MODEL: fal-ai/flux/schnell
+          FAL_IMG_W: "736"
+          FAL_IMG_H: "1312"
           VISUAL_MODE: photos
           EDGE_VOICE: es-ES-AlvaroNeural
           EDGE_RATE: "+0%"
